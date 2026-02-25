@@ -801,19 +801,23 @@ export function InvoiceEditor() {
   };
 
   // Download PDF
-  const downloadPdf = async (invoiceId) => {
+  const downloadPdf = async (invoiceId, type = 'type1') => {
     try {
-      const response = await axios.get(`${API}/invoices/${invoiceId}/pdf`, {
+      const url = type === 'type2'
+        ? `${API}/invoices/${invoiceId}/pdf/type2`
+        : `${API}/invoices/${invoiceId}/pdf`;
+      const response = await axios.get(url, {
         withCredentials: true,
         responseType: 'blob'
       });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `invoice_${invoiceId}.pdf`);
+      link.href = blobUrl;
+      link.setAttribute('download', `invoice_${invoiceId}_${type}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(blobUrl);
       toast.success('PDF downloaded');
     } catch (error) {
       toast.error('Failed to download PDF');
