@@ -42,6 +42,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import { 
   Plus, FileText, Send, Trash2, Download, CheckCircle, Clock, AlertCircle,
