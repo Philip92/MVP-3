@@ -1319,6 +1319,10 @@ async def get_manifest_excel(trip_id: str, tenant_id: str = Depends(get_tenant_i
     buf.seek(0)
     filename = f"Manifest-{trip_number}.xlsx"
     return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 # ============ LABELS PDF ============
@@ -1349,9 +1353,4 @@ async def get_trip_labels_pdf(
         pdf_buffer,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=labels_{trip_number}.pdf"}
-    )
-
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
