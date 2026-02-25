@@ -952,3 +952,154 @@ async def create_default_warehouses(
         return {"message": "Default warehouses already exist", "created": []}
 
 # ============ HEALTH CHECK ============
+
+
+# ============ WAREHOUSE LABELS PDF ============
+
+@router.post("/warehouse/labels/pdf")
+async def get_warehouse_labels_pdf(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    user: dict = Depends(get_current_user)
+):
+    """Generate labels PDF for selected warehouse shipments."""
+    from services.pdf_service import generate_labels_pdf
+
+    shipment_ids = data.get("shipment_ids", [])
+    if not shipment_ids:
+        raise HTTPException(400, "No shipments selected")
+
+    pdf_buffer = await generate_labels_pdf(shipment_ids, tenant_id)
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=warehouse_labels.pdf"}
+    )
+
+
+# ============ WAREHOUSE EXCEL EXPORT ============
+
+@router.get("/warehouse/export/excel")
+async def export_warehouse_excel(
+    warehouse_id: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    tenant_id: str = Depends(get_tenant_id),
+    user: dict = Depends(get_current_user)
+):
+    """Export warehouse parcels as Excel in Digital Manifest format (24 columns)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    query = {"tenant_id": tenant_id}
+
+    warehouse_filter = build_warehouse_filter(user)
+    if warehouse_filter:
+        if warehouse_id and warehouse_id != "all":
+            await check_warehouse_access(user, warehouse_id)
+            query["warehouse_id"] = warehouse_id
+        else:
+            query.update(warehouse_filter)
+    elif warehouse_id and warehouse_id != "all":
+        query["warehouse_id"] = warehouse_id
+
+    if status and status != "all":
+        if "," in status:
+            query["status"] = {"$in": status.split(",")}
+        else:
+            query["status"] = status
+
+    if search:
+        query["$or"] = [
+            {"description": {"$regex": search, "$options": "i"}},
+            {"recipient": {"$regex": search, "$options": "i"}},
+            {"id": {"$regex": search, "$options": "i"}}
+        ]
+
+    parcels = await db.shipments.find(query, {"_id": 0}).sort("created_at", 1).to_list(None)
+
+    if not parcels:
+        raise HTTPException(404, "No parcels found matching filters")
+
+    client_ids = list(set(p.get("client_id") for p in parcels if p.get("client_id")))
+    clients = await db.clients.find({"id": {"$in": client_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(None)
+    clients_map = {c["id"]: c["name"] for c in clients}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Warehouse Export"
+
+    ws['A1'] = "WAREHOUSE EXPORT - DIGITAL MANIFEST FORMAT"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A2'] = f"Warehouse: {warehouse_id if warehouse_id and warehouse_id != 'all' else 'All'}"
+    ws['A3'] = f"Status: {status if status and status != 'all' else 'All'}"
+    ws['A4'] = f"Search: {search if search else 'None'}"
+    ws['A5'] = f"Exported: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+
+    headers = [
+        "#", "Parcel ID", "Barcode", "Client", "Recipient", "Description",
+        "Pieces", "L (cm)", "W (cm)", "H (cm)", "Vol Weight", "Actual Weight (kg)",
+        "Shipping Weight", "CBM", "Destination", "Trip", "Invoice #",
+        "Invoice Status", "Status", "Warehouse", "Date In", "Date Out",
+        "Collected Date", "Notes"
+    ]
+
+    header_row = 7
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col_idx, value=header)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for row_idx, parcel in enumerate(parcels, start=header_row + 1):
+        ws.cell(row=row_idx, column=1, value=row_idx - header_row)
+        ws.cell(row=row_idx, column=2, value=parcel.get("id", ""))
+        ws.cell(row=row_idx, column=3, value=parcel.get("barcode", ""))
+        ws.cell(row=row_idx, column=4, value=clients_map.get(parcel.get("client_id"), "Unknown"))
+        ws.cell(row=row_idx, column=5, value=parcel.get("recipient", ""))
+        ws.cell(row=row_idx, column=6, value=parcel.get("description", ""))
+        ws.cell(row=row_idx, column=7, value=parcel.get("total_pieces", 1))
+        ws.cell(row=row_idx, column=8, value=parcel.get("length_cm", 0))
+        ws.cell(row=row_idx, column=9, value=parcel.get("width_cm", 0))
+        ws.cell(row=row_idx, column=10, value=parcel.get("height_cm", 0))
+        vol_weight = 0
+        l, w, h = parcel.get("length_cm", 0) or 0, parcel.get("width_cm", 0) or 0, parcel.get("height_cm", 0) or 0
+        if l and w and h:
+            vol_weight = round((l * w * h) / 5000, 2)
+        ws.cell(row=row_idx, column=11, value=vol_weight)
+        ws.cell(row=row_idx, column=12, value=round(parcel.get("total_weight", 0) or 0, 2))
+        shipping_weight = max(parcel.get("total_weight", 0) or 0, vol_weight)
+        ws.cell(row=row_idx, column=13, value=round(shipping_weight, 2))
+        ws.cell(row=row_idx, column=14, value=round(parcel.get("total_cbm", 0) or 0, 4))
+        ws.cell(row=row_idx, column=15, value=parcel.get("destination", ""))
+        ws.cell(row=row_idx, column=16, value=parcel.get("trip_number", ""))
+        ws.cell(row=row_idx, column=17, value=parcel.get("invoice_number", ""))
+        ws.cell(row=row_idx, column=18, value=parcel.get("invoice_status", ""))
+        ws.cell(row=row_idx, column=19, value=parcel.get("status", ""))
+        ws.cell(row=row_idx, column=20, value=parcel.get("warehouse_name", ""))
+        ws.cell(row=row_idx, column=21, value=str(parcel.get("created_at", ""))[:10])
+        ws.cell(row=row_idx, column=22, value=str(parcel.get("loaded_at", ""))[:10] if parcel.get("loaded_at") else "")
+        ws.cell(row=row_idx, column=23, value=str(parcel.get("collected_at", ""))[:10] if parcel.get("collected_at") else "")
+        ws.cell(row=row_idx, column=24, value=parcel.get("notes", ""))
+
+    for column in ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"warehouse_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
