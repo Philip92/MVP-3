@@ -1181,9 +1181,11 @@ export function Settings() {
                       <CardContent className="p-6 text-center">
                         <FileSpreadsheet className="h-8 w-8 mx-auto mb-3 text-green-600" />
                         <h3 className="font-medium mb-2">Import Parcels from CSV</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Import parcels with client auto-matching
-                        </p>
+                        <div className="text-left bg-green-50 border border-green-200 rounded-md p-3 mb-3">
+                          <p className="text-xs font-semibold text-green-800 mb-1">CSV Column Order (required):</p>
+                          <p className="text-xs text-green-700 font-mono">Client Name, Recipient, Description, Pieces, Weight(kg), Length(cm), Width(cm), Height(cm), Destination</p>
+                          <p className="text-xs text-green-600 mt-1 italic">First row must be headers. Client Name is matched to existing clients.</p>
+                        </div>
                         <Button variant="outline" className="w-full" onClick={() => setImportModalOpen(true)}>
                           <Upload className="h-4 w-4 mr-2" />
                           Import Parcels CSV
