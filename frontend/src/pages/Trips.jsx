@@ -567,6 +567,12 @@ export function Trips() {
                           <TableCell className="text-right font-mono text-sm">
                             {(stats.total_weight || 0).toLocaleString()} kg
                           </TableCell>
+                          <TableCell className="text-right font-mono text-sm" data-testid={`table-capacity-${trip.trip_number}`}>
+                            {stats.capacity_kg ? `${stats.capacity_kg.toLocaleString()} kg` : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-sm" data-testid={`table-cbm-${trip.trip_number}`}>
+                            {stats.total_cbm ? stats.total_cbm.toFixed(2) : '0'}{stats.capacity_cbm ? ` / ${stats.capacity_cbm}` : ''}
+                          </TableCell>
                           <TableCell>
                             <Badge className={`${status.bg} ${status.text} border-0`}>
                               {status.label}
