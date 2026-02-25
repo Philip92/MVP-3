@@ -956,3 +956,95 @@ async def update_banking_details(
     )
     
     return {"message": "Banking details updated successfully"}
+
+
+# ============ INVOICE NUMBER FORMAT SETTINGS ============
+
+@router.get("/settings/invoice-number-format")
+async def get_invoice_number_format(tenant_id: str = Depends(get_tenant_id)):
+    """Get current invoice number format configuration."""
+    from services.invoice_number_service import InvoiceNumberService
+
+    settings = await db.settings.find_one({"tenant_id": tenant_id})
+
+    if not settings or not settings.get("invoice_number_format"):
+        default_segments = [
+            {"type": "STATIC", "value": "INV"},
+            {"type": "YEAR", "digits": 4},
+            {"type": "GLOBAL_SEQ", "digits": 3}
+        ]
+        preview = await InvoiceNumberService.preview_format(default_segments, "-")
+        return {
+            "segments": default_segments,
+            "separator": "-",
+            "preview": preview
+        }
+
+    format_config = settings["invoice_number_format"]
+    preview = await InvoiceNumberService.preview_format(
+        format_config["segments"],
+        format_config.get("separator", "-")
+    )
+
+    return {
+        **format_config,
+        "preview": preview
+    }
+
+
+@router.put("/settings/invoice-number-format")
+async def update_invoice_number_format(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id),
+    user: dict = Depends(get_current_user)
+):
+    """Update invoice number format configuration."""
+    from services.invoice_number_service import InvoiceNumberService
+
+    segments = data.get("segments", [])
+    separator = data.get("separator", "-")
+
+    if not segments:
+        raise HTTPException(400, "At least one segment required")
+
+    valid_types = ["STATIC", "YEAR", "MONTH", "TRIP_SEQ", "GLOBAL_SEQ"]
+    for seg in segments:
+        if seg.get("type") not in valid_types:
+            raise HTTPException(400, f"Invalid segment type: {seg.get('type')}")
+        if seg["type"] == "STATIC" and not seg.get("value"):
+            raise HTTPException(400, "STATIC segment requires 'value'")
+
+    preview = await InvoiceNumberService.preview_format(segments, separator)
+
+    await db.settings.update_one(
+        {"tenant_id": tenant_id},
+        {
+            "$set": {
+                "invoice_number_format": {
+                    "segments": segments,
+                    "separator": separator
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_by": user["id"]
+            }
+        },
+        upsert=True
+    )
+
+    return {"success": True, "preview": preview}
+
+
+@router.post("/settings/invoice-number-format/preview")
+async def preview_invoice_number_format(
+    data: dict,
+    tenant_id: str = Depends(get_tenant_id)
+):
+    """Preview invoice number format without saving."""
+    from services.invoice_number_service import InvoiceNumberService
+
+    segments = data.get("segments", [])
+    separator = data.get("separator", "-")
+
+    preview = await InvoiceNumberService.preview_format(segments, separator)
+
+    return {"preview": preview}
