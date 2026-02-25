@@ -1502,6 +1502,11 @@ export function Settings() {
           <TabsContent value="printnode" className="space-y-4">
             <PrintNodeSettings />
           </TabsContent>
+
+          {/* Invoice Numbering */}
+          <TabsContent value="invoice-numbering" className="space-y-4">
+            <InvoiceNumberFormatBuilder />
+          </TabsContent>
         </Tabs>
 
         {/* CSV Import Modal */}
