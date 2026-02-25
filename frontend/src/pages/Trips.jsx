@@ -522,6 +522,8 @@ export function Trips() {
                     <TableHead className="w-[130px] font-semibold">Date</TableHead>
                     <TableHead className="w-[120px] text-center font-semibold">Parcels</TableHead>
                     <TableHead className="w-[100px] text-right font-semibold">Weight</TableHead>
+                    <TableHead className="w-[100px] text-right font-semibold">Capacity</TableHead>
+                    <TableHead className="w-[80px] text-right font-semibold">CBM</TableHead>
                     <TableHead className="w-[130px] font-semibold">Status</TableHead>
                     <TableHead className="w-[100px] text-center font-semibold">Actions</TableHead>
                   </TableRow>
