@@ -605,10 +605,34 @@ export function Warehouse() {
     }
   };
 
-  const handleBulkPrint = () => {
-    const count = selectedIds.size;
-    console.log('Print labels for:', Array.from(selectedIds));
-    toast.success(`${count} label${count > 1 ? 's' : ''} ready to print`);
+  const handleBulkPrint = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      toast.error('No parcels selected');
+      return;
+    }
+    try {
+      const response = await axios.post(`${API}/warehouse/labels/pdf`, {
+        shipment_ids: ids
+      }, { withCredentials: true, responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `warehouse_labels_${ids.length}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+      toast.success(`${ids.length} label${ids.length > 1 ? 's' : ''} downloaded`);
+    } catch {
+      toast.error('Failed to generate labels PDF');
+    }
+  };
+
+  const handleExportExcel = () => {
+    const params = new URLSearchParams();
+    if (selectedWarehouse !== 'all') params.append('warehouse_id', selectedWarehouse);
+    if (activeFilters.length > 0) params.append('status', activeFilters.join(','));
+    if (searchQuery) params.append('search', searchQuery);
+    window.open(`${API}/warehouse/export/excel?${params.toString()}`, '_blank');
   };
 
   const handleSingleDelete = async (parcelId) => {
