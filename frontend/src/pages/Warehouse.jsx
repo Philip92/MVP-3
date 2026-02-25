@@ -58,7 +58,7 @@ import {
   Package, Search, MoreVertical, Edit, Trash2, Eye, Printer, 
   X, Filter, ChevronLeft, ChevronRight, ArrowUpDown,
   Truck, Check, ChevronsUpDown, Image as ImageIcon, Upload, Loader2, ZoomIn,
-  Copy, AlertTriangle, Warehouse as WarehouseIcon, RefreshCw, ScanLine
+  Copy, AlertTriangle, Warehouse as WarehouseIcon, RefreshCw, ScanLine, FileSpreadsheet, Download
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
