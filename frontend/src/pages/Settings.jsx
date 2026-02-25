@@ -801,6 +801,9 @@ export function Settings() {
             <TabsTrigger value="printnode" data-testid="tab-printnode">
               <Printer className="h-4 w-4 mr-2" />PrintNode
             </TabsTrigger>
+            <TabsTrigger value="invoice-numbering" data-testid="tab-invoice-numbering">
+              <Calculator className="h-4 w-4 mr-2" />Invoice Numbering
+            </TabsTrigger>
           </TabsList>
 
           {/* Company Profile */}
