@@ -1126,9 +1126,11 @@ export function Settings() {
                       <CardContent className="p-6 text-center">
                         <Upload className="h-8 w-8 mx-auto mb-3 text-blue-600" />
                         <h3 className="font-medium mb-2">Import Clients</h3>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          CSV: Name, Phone, Email, VAT, Address, Rate
-                        </p>
+                        <div className="text-left bg-blue-50 border border-blue-200 rounded-md p-3 mb-3">
+                          <p className="text-xs font-semibold text-blue-800 mb-1">CSV Column Order (required):</p>
+                          <p className="text-xs text-blue-700 font-mono">Name, Phone, Email, VAT, Address, Rate</p>
+                          <p className="text-xs text-blue-600 mt-1 italic">First row must be headers. Rate is per-kg charge.</p>
+                        </div>
                         <Button 
                           variant="link" 
                           size="sm" 
