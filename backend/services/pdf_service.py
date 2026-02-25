@@ -564,3 +564,353 @@ async def generate_client_statement_pdf(client_id: str, tenant_id: str):
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+
+
+# ============ LABELS PDF GENERATION ============
+
+async def generate_labels_pdf(shipment_ids: list, tenant_id: str):
+    """
+    Generate A6 parcel labels PDF - one label per page.
+    Each label contains 14 fields + QR code + barcode.
+    """
+    from reportlab.lib.pagesizes import A6
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+    from reportlab.lib import colors
+    from io import BytesIO
+    import qrcode
+
+    shipments = await db.shipments.find({
+        "id": {"$in": shipment_ids},
+        "tenant_id": tenant_id
+    }, {"_id": 0}).to_list(None)
+
+    if not shipments:
+        raise HTTPException(404, "No shipments found")
+
+    client_ids = list(set(s.get("client_id") for s in shipments if s.get("client_id")))
+    clients = await db.clients.find({"id": {"$in": client_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(None)
+    client_map = {c["id"]: c["name"] for c in clients}
+
+    for s in shipments:
+        s["client_name"] = client_map.get(s.get("client_id"), "Unknown")
+
+    # Get trip info for trip numbers
+    trip_ids = list(set(s.get("trip_id") for s in shipments if s.get("trip_id")))
+    trips = await db.trips.find({"id": {"$in": trip_ids}}, {"_id": 0, "id": 1, "trip_number": 1}).to_list(None)
+    trip_map = {t["id"]: t.get("trip_number", "N/A") for t in trips}
+
+    # Get warehouse names
+    warehouse_ids = list(set(s.get("warehouse_id") for s in shipments if s.get("warehouse_id")))
+    warehouses = await db.warehouses.find({"id": {"$in": warehouse_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(None)
+    warehouse_map = {w["id"]: w.get("name", "") for w in warehouses}
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A6)
+    width, height = A6
+
+    for shipment in shipments:
+        trip_number = trip_map.get(shipment.get("trip_id"), "N/A")
+        warehouse_name = warehouse_map.get(shipment.get("warehouse_id"), "")
+
+        # Generate QR code
+        qr = qrcode.QRCode(version=1, box_size=3, border=1)
+        qr.add_data(shipment.get("barcode", shipment.get("id", "")))
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+
+        qr_buffer = BytesIO()
+        qr_img.save(qr_buffer, format='PNG')
+        qr_buffer.seek(0)
+
+        from reportlab.lib.utils import ImageReader
+        qr_reader = ImageReader(qr_buffer)
+
+        # Draw border
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(1)
+        c.rect(5*mm, 5*mm, width - 10*mm, height - 10*mm)
+
+        # Header
+        c.setFont("Helvetica-Bold", 14)
+        c.drawCentredString(width / 2, height - 15*mm, "SERVEX HOLDINGS")
+        c.setFont("Helvetica", 8)
+        c.drawCentredString(width / 2, height - 20*mm, "Logistics Services to Kenya and South Africa")
+
+        # Line separator
+        c.line(10*mm, height - 25*mm, width - 10*mm, height - 25*mm)
+
+        # 14 fields in two columns
+        y_pos = height - 35*mm
+        line_height = 6*mm
+        left_x = 10*mm
+        right_x = width / 2 + 5*mm
+
+        # Calculate CBM
+        l_cm = shipment.get("length_cm", 0) or 0
+        w_cm = shipment.get("width_cm", 0) or 0
+        h_cm = shipment.get("height_cm", 0) or 0
+        cbm = round(shipment.get("total_cbm", 0) or (l_cm * w_cm * h_cm / 1000000), 4)
+        shipping_weight = max(shipment.get("total_weight", 0) or 0, (l_cm * w_cm * h_cm) / 5000)
+
+        # Left column (7 fields)
+        fields_left = [
+            ("Parcel ID:", str(shipment.get("id", ""))[:12]),
+            ("Client:", str(shipment.get("client_name", ""))[:20]),
+            ("Recipient:", str(shipment.get("recipient", ""))[:20]),
+            ("Destination:", str(shipment.get("destination", ""))),
+            ("Weight:", f"{shipment.get('total_weight', 0) or 0} kg"),
+            ("Pieces:", str(shipment.get("total_pieces", 1))),
+            ("Trip:", trip_number)
+        ]
+
+        for label, value in fields_left:
+            c.setFont("Helvetica-Bold", 7)
+            c.drawString(left_x, y_pos, label)
+            c.setFont("Helvetica", 7)
+            c.drawString(left_x + 20*mm, y_pos, str(value))
+            y_pos -= line_height
+
+        # Right column (7 fields)
+        y_pos = height - 35*mm
+        fields_right = [
+            ("Invoice #:", str(shipment.get("invoice_number", "N/A"))),
+            ("Status:", str(shipment.get("status", "")).upper()),
+            ("CBM:", f"{cbm:.4f}"),
+            ("LxWxH:", f"{l_cm}x{w_cm}x{h_cm}"),
+            ("Ship Wt:", f"{shipping_weight:.1f} kg"),
+            ("Warehouse:", warehouse_name),
+            ("Date:", str(shipment.get("created_at", ""))[:10])
+        ]
+
+        for label, value in fields_right:
+            c.setFont("Helvetica-Bold", 7)
+            c.drawString(right_x, y_pos, label)
+            c.setFont("Helvetica", 7)
+            c.drawString(right_x + 18*mm, y_pos, str(value))
+            y_pos -= line_height
+
+        # QR code at bottom
+        c.drawImage(qr_reader, 10*mm, 10*mm, 30*mm, 30*mm, preserveAspectRatio=True)
+
+        # Barcode text below QR
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(45*mm, 15*mm, shipment.get("barcode", shipment.get("id", "")[:16]))
+
+        c.showPage()
+
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+
+# ============ INVOICE PDF TYPE 2 ============
+
+async def generate_invoice_pdf_type2(invoice_id: str, tenant_id: str):
+    """
+    TYPE 2 Invoice PDF - Servex branded template with red accents.
+    """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
+    from io import BytesIO
+    import os
+
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(404, "Invoice not found")
+
+    client = await db.clients.find_one({"id": invoice["client_id"], "tenant_id": tenant_id}, {"_id": 0})
+    if not client:
+        raise HTTPException(404, "Client not found")
+
+    line_items = await db.invoice_line_items.find(
+        {"invoice_id": invoice_id},
+        {"_id": 0}
+    ).to_list(None)
+
+    # Get banking details
+    settings = await db.settings.find_one({"tenant_id": tenant_id}, {"_id": 0})
+    banking = []
+    if settings and settings.get("banking_details"):
+        banking = settings["banking_details"]
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm, leftMargin=15*mm, rightMargin=15*mm)
+    story = []
+    styles = getSampleStyleSheet()
+    page_width = A4[0] - 30*mm
+
+    servex_red = colors.HexColor('#8B0000')
+
+    title_style = ParagraphStyle('ServexTitle', parent=styles['Heading1'], fontSize=20, textColor=servex_red, alignment=TA_CENTER, spaceAfter=10)
+    red_style = ParagraphStyle('RedText', parent=styles['Normal'], fontSize=10, textColor=servex_red, alignment=TA_RIGHT, fontName='Helvetica-Bold')
+    small_style = ParagraphStyle('SmallText', parent=styles['Normal'], fontSize=8, leading=10)
+    disclaimer_style = ParagraphStyle('Disclaimer', parent=styles['Normal'], fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
+
+    # Header: Logo (left) and Tagline (right)
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "servex_logo.png")
+    if os.path.exists(logo_path):
+        try:
+            logo = RLImage(logo_path, width=50*mm, height=50*mm)
+        except Exception:
+            logo = Paragraph("<b>SERVEX HOLDINGS</b>", title_style)
+    else:
+        logo = Paragraph("<b>SERVEX HOLDINGS</b>", title_style)
+
+    tagline = Paragraph("Logistics Services to Kenya<br/>and South Africa", red_style)
+
+    header_table = Table([[logo, tagline]], colWidths=[page_width * 0.55, page_width * 0.45])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 5*mm))
+
+    # Invoice title
+    story.append(Paragraph(f"INVOICE {invoice.get('invoice_number', 'N/A')}", title_style))
+    story.append(Spacer(1, 5*mm))
+
+    # Header grid (3 columns)
+    company_lines = [
+        "<b>Servex Holdings (PTY) Ltd</b>",
+        "Email: info@servexholdings.info",
+        "Phone: +27 11 123 4567",
+    ]
+    client_lines = [
+        "<b>Bill To:</b>",
+        client.get("name", ""),
+        client.get("company_name", "") or "",
+        client.get("email", "") or "",
+        f"VAT: {client.get('vat_number', 'N/A')}",
+    ]
+    invoice_lines = [
+        f"<b>Invoice #:</b> {invoice.get('invoice_number', '')}",
+        f"<b>Date:</b> {str(invoice.get('issue_date', invoice.get('created_at', '')))[:10]}",
+        f"<b>Due Date:</b> {str(invoice.get('due_date', ''))[:10]}",
+        f"<b>Status:</b> {invoice.get('status', 'draft').upper()}",
+    ]
+
+    max_rows = max(len(company_lines), len(client_lines), len(invoice_lines))
+    grid_data = [
+        [
+            Paragraph("<b>From:</b>", styles['Normal']),
+            Paragraph("<b>To:</b>", styles['Normal']),
+            Paragraph("<b>Invoice Details:</b>", styles['Normal'])
+        ]
+    ]
+
+    for i in range(max_rows):
+        row = [
+            Paragraph(company_lines[i] if i < len(company_lines) else "", small_style),
+            Paragraph(client_lines[i] if i < len(client_lines) else "", small_style),
+            Paragraph(invoice_lines[i] if i < len(invoice_lines) else "", small_style),
+        ]
+        grid_data.append(row)
+
+    col_w = page_width / 3
+    grid_table = Table(grid_data, colWidths=[col_w, col_w, col_w])
+    grid_table.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F0F0F0')),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    story.append(grid_table)
+    story.append(Spacer(1, 8*mm))
+
+    # Line items table
+    items_header = ["#", "Description", "L", "W", "H", "Vol", "Act.Wt", "Ship.Wt", "Rate", "Amount"]
+    items_data = [[Paragraph(f"<b>{h}</b>", small_style) for h in items_header]]
+
+    for idx, item in enumerate(line_items, start=1):
+        length = item.get("length_cm", 0) or 0
+        width_val = item.get("width_cm", 0) or 0
+        height_val = item.get("height_cm", 0) or 0
+        vol_weight = round((length * width_val * height_val) / 5000, 1) if (length and width_val and height_val) else 0
+        actual_weight = item.get("weight", 0) or 0
+        ship_weight = max(actual_weight, vol_weight)
+
+        items_data.append([
+            str(idx),
+            Paragraph(str(item.get("description", ""))[:35], small_style),
+            str(length),
+            str(width_val),
+            str(height_val),
+            f"{vol_weight:.1f}",
+            f"{actual_weight:.1f}",
+            f"{ship_weight:.1f}",
+            f"{item.get('rate', 0):.2f}",
+            f"R {item.get('amount', 0):.2f}",
+        ])
+
+    subtotal = invoice.get('subtotal', invoice.get('total', 0))
+    vat_rate = 15
+    vat_amount = round(subtotal * vat_rate / 100, 2)
+    total = invoice.get('total', subtotal + vat_amount)
+
+    items_data.append(["", "", "", "", "", "", "", "", Paragraph("<b>Subtotal:</b>", small_style), Paragraph(f"<b>R {subtotal:.2f}</b>", small_style)])
+    items_data.append(["", "", "", "", "", "", "", "", Paragraph(f"<b>VAT ({vat_rate}%):</b>", small_style), Paragraph(f"<b>R {vat_amount:.2f}</b>", small_style)])
+    items_data.append(["", "", "", "", "", "", "", "", Paragraph("<b>TOTAL:</b>", small_style), Paragraph(f"<b>R {total:.2f}</b>", small_style)])
+
+    item_col_widths = [8*mm, page_width - 133*mm, 12*mm, 12*mm, 12*mm, 14*mm, 16*mm, 16*mm, 18*mm, 25*mm]
+    items_table = Table(items_data, colWidths=item_col_widths)
+    items_table.setStyle(TableStyle([
+        ('GRID', (0, 0), (-1, -4), 0.5, colors.grey),
+        ('LINEABOVE', (0, -3), (-1, -3), 1, colors.black),
+        ('BACKGROUND', (0, 0), (-1, 0), servex_red),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE', (0, 0), (-1, -1), 7),
+        ('ALIGN', (2, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    story.append(items_table)
+    story.append(Spacer(1, 8*mm))
+
+    # Payment details
+    payment_lines = ["<b>Payment Details:</b>"]
+    if banking:
+        for acc in banking:
+            if isinstance(acc, dict):
+                payment_lines.append(f"<b>{acc.get('currency', '')}:</b> {acc.get('bank_name', '')} | Acc: {acc.get('account_number', '')} | Branch: {acc.get('branch_code', '')} | Swift: {acc.get('swift_code', '')}")
+    else:
+        payment_lines.append("Bank: First National Bank | Acc: Servex Holdings (PTY) Ltd | Acc #: 62 1234 5678 9 | Branch: 250 655 | Swift: FIRNZAJJ")
+    payment_lines.append(f"Reference: {invoice.get('invoice_number', '')}")
+
+    payment_text = "<br/>".join(payment_lines)
+    story.append(Paragraph(payment_text, small_style))
+    story.append(Spacer(1, 5*mm))
+
+    # Collection locations
+    collection_text = """<b>Collection Locations:</b><br/>
+    <b>Johannesburg:</b> 123 Main Road, Johannesburg, South Africa | Tel: +27 11 123 4567<br/>
+    <b>Nairobi:</b> 456 Kenyatta Avenue, Nairobi, Kenya | Tel: +254 20 123 4567"""
+    story.append(Paragraph(collection_text, small_style))
+    story.append(Spacer(1, 5*mm))
+
+    # Disclaimer
+    story.append(Paragraph("All goods remain the property of Servex Holdings until payment is received in full. Terms and conditions apply.", disclaimer_style))
+
+    # Red bottom bar
+    story.append(Spacer(1, 5*mm))
+    bottom_bar = Table([[""]], colWidths=[page_width])
+    bottom_bar.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), servex_red),
+        ('TOPPADDING', (0, 0), (-1, -1), 2*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2*mm),
+    ]))
+    story.append(bottom_bar)
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
