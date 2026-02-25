@@ -377,6 +377,16 @@ export function Trips() {
               <span className="text-gray-600">Weight:</span>
               <span className="font-semibold text-[#3C3F42]">{(stats.total_weight || 0).toLocaleString()} kg</span>
             </div>
+            <div className="flex items-center gap-2 text-sm" data-testid={`trip-capacity-kg-${trip.trip_number}`}>
+              <Weight className="h-4 w-4 text-blue-500" />
+              <span className="text-gray-600">Capacity:</span>
+              <span className="font-semibold text-[#3C3F42]">{stats.capacity_kg ? `${stats.capacity_kg.toLocaleString()} kg` : 'N/A'}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm" data-testid={`trip-cbm-${trip.trip_number}`}>
+              <Box className="h-4 w-4 text-blue-500" />
+              <span className="text-gray-600">CBM:</span>
+              <span className="font-semibold text-[#3C3F42]">{stats.total_cbm ? stats.total_cbm.toFixed(4) : '0'} / {stats.capacity_cbm ? stats.capacity_cbm : 'N/A'}</span>
+            </div>
             <div className="flex items-center gap-2 text-sm">
               <Users className="h-4 w-4 text-[#6B633C]" />
               <span className="text-gray-600">Clients:</span>
