@@ -1559,3 +1559,25 @@ async def list_team_members(
     
     return members
 
+
+
+# ============ INVOICE PDF TYPE 2 ============
+
+@router.get("/invoices/{invoice_id}/pdf/type2")
+async def download_invoice_pdf_type2(
+    invoice_id: str,
+    tenant_id: str = Depends(get_tenant_id)
+):
+    """Download Invoice PDF - TYPE 2 (Servex branded template)."""
+    from services.pdf_service import generate_invoice_pdf_type2
+
+    pdf_buffer = await generate_invoice_pdf_type2(invoice_id, tenant_id)
+
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tenant_id}, {"_id": 0, "invoice_number": 1})
+    invoice_number = invoice.get("invoice_number", invoice_id) if invoice else invoice_id
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=invoice_{invoice_number}_type2.pdf"}
+    )
