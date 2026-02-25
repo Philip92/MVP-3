@@ -1497,6 +1497,26 @@ export function TripDetail() {
               </CardHeader>
             </Card>
 
+            {/* ---- PARCEL LABELS ---- */}
+            <Card className="bg-white">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base font-semibold">Parcel Labels</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">Generate A6 labels with QR codes for all parcels in this trip</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-[#6B633C] hover:bg-[#5a5332]"
+                    onClick={() => window.open(`${API}/trips/${tripId}/labels/pdf`, '_blank')}
+                    data-testid="download-labels-pdf"
+                  >
+                    <Download className="h-4 w-4 mr-2" /> Download Labels (PDF)
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+
             {/* ---- UPLOADED DOCUMENTS ---- */}
             <div>
               <div className="flex justify-between items-center mb-2">
