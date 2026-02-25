@@ -3,6 +3,7 @@ Warehouse routes for Servex Holdings backend.
 Handles warehouse operations including parcel management and photo uploads.
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
+from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from datetime import datetime, timezone
 import base64
