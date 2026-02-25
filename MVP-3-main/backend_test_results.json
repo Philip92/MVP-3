@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-02-25T07:53:53.146515",
+  "total_tests": 1,
+  "passed_tests": 0,
+  "success_rate": 0.0,
+  "test_details": [
+    {
+      "name": "Backend Health Check",
+      "passed": false,
+      "details": "Status: 404",
+      "endpoint": "/api/health",
+      "timestamp": "2026-02-25T07:53:53.146497"
+    }
+  ]
+}

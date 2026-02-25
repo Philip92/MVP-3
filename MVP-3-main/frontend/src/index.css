@@ -1,0 +1,191 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        /* Servex Holdings Professional Theme */
+        --background: 36 4% 62%; /* #9B9B9D Medium Gray */
+        --foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --card: 0 0% 100%; /* White */
+        --card-foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --popover: 0 0% 100%; /* White */
+        --popover-foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --primary: 53 31% 33%; /* #6B633C Olive Green */
+        --primary-foreground: 0 0% 100%; /* White */
+        --secondary: 30 10% 51%; /* #938878 Taupe */
+        --secondary-foreground: 0 0% 100%; /* White */
+        --muted: 40 17% 85%; /* #E8E4D0 Cream */
+        --muted-foreground: 216 4% 40%; /* Darker gray for muted text */
+        --accent: 52 69% 72%; /* #E8DC88 Light Gold */
+        --accent-foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --destructive: 4 70% 46%; /* #C0392B Red */
+        --destructive-foreground: 0 0% 100%; /* White */
+        --border: 38 17% 82%; /* #D4CFC0 Light Beige */
+        --input: 38 17% 82%; /* #D4CFC0 Light Beige */
+        --ring: 53 31% 33%; /* #6B633C Olive Green */
+        --radius: 0.375rem;
+        --chart-1: 53 31% 33%; /* Olive */
+        --chart-2: 52 69% 72%; /* Light Gold */
+        --chart-3: 216 4% 25%; /* Dark Charcoal */
+        --chart-4: 30 10% 51%; /* Taupe */
+        --chart-5: 88 41% 39%; /* #5A8F3B Green for delivered */
+        
+        /* Sidebar specific */
+        --sidebar: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --sidebar-foreground: 0 0% 100%; /* White */
+        --sidebar-accent: 52 69% 72%; /* #E8DC88 Light Gold */
+        --sidebar-accent-foreground: 216 4% 25%; /* Dark Charcoal */
+    }
+
+    .dark {
+        /* Servex Holdings Light Theme (alternative) */
+        --background: 40 17% 90%; /* #E8E4D0 Cream */
+        --foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --card: 0 0% 100%; /* White */
+        --card-foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --popover: 0 0% 100%; /* White */
+        --popover-foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --primary: 53 31% 33%; /* #6B633C Olive Green */
+        --primary-foreground: 0 0% 100%; /* White */
+        --secondary: 30 10% 51%; /* #938878 Taupe */
+        --secondary-foreground: 0 0% 100%; /* White */
+        --muted: 36 4% 70%; /* Lighter gray */
+        --muted-foreground: 216 4% 35%;
+        --accent: 52 69% 72%; /* #E8DC88 Light Gold */
+        --accent-foreground: 216 4% 25%; /* #3C3F42 Dark Charcoal */
+        --destructive: 4 70% 46%; /* #C0392B Red */
+        --destructive-foreground: 0 0% 100%; /* White */
+        --border: 38 17% 75%; /* Slightly darker beige */
+        --input: 38 17% 82%;
+        --ring: 53 31% 33%;
+        
+        /* Sidebar specific - lighter variant */
+        --sidebar: 30 10% 51%; /* #938878 Taupe */
+        --sidebar-foreground: 0 0% 100%; /* White */
+        --sidebar-accent: 52 69% 72%; /* #E8DC88 Light Gold */
+        --sidebar-accent-foreground: 216 4% 25%; /* Dark Charcoal */
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+        font-family: 'Inter', sans-serif;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Manrope', sans-serif;
+    }
+
+    code, pre, .font-mono {
+        font-family: 'JetBrains Mono', monospace;
+    }
+}
+
+@layer utilities {
+    .font-heading {
+        font-family: 'Manrope', sans-serif;
+    }
+
+    .font-sans {
+        font-family: 'Inter', sans-serif;
+    }
+
+    .font-mono {
+        font-family: 'JetBrains Mono', monospace;
+    }
+}
+
+/* Scanner animation */
+@keyframes scan-line {
+    0% {
+        top: 0;
+    }
+    50% {
+        top: calc(100% - 4px);
+    }
+    100% {
+        top: 0;
+    }
+}
+
+.scan-line {
+    animation: scan-line 2s ease-in-out infinite;
+}
+
+/* Highlight flash animation for parcel highlight */
+@keyframes highlight-flash {
+    0%, 100% { background-color: rgba(251, 191, 36, 0.1); }
+    50% { background-color: rgba(251, 191, 36, 0.4); }
+}
+
+.animate-highlight-flash {
+    animation: highlight-flash 0.5s ease-in-out 3;
+}
+
+/* Servex Status badges */
+.status-warehouse {
+    @apply bg-[#938878]/20 text-[#3C3F42] border border-[#938878];
+}
+
+.status-staged {
+    @apply bg-[#E8DC88] text-[#3C3F42] border border-[#E8DC88];
+}
+
+.status-loaded {
+    @apply bg-[#6B633C] text-white border border-[#6B633C];
+}
+
+.status-in-transit {
+    @apply bg-[#3C3F42] text-white border border-[#3C3F42];
+}
+
+.status-delivered {
+    @apply bg-[#5A8F3B] text-white border border-[#5A8F3B];
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-muted;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+}
+
+/* Debug wrapper */
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+
+    [data-debug-wrapper="true"] > * {
+        margin-left: inherit;
+        margin-right: inherit;
+        margin-top: inherit;
+        margin-bottom: inherit;
+        padding-left: inherit;
+        padding-right: inherit;
+        padding-top: inherit;
+        padding-bottom: inherit;
+        column-gap: inherit;
+        row-gap: inherit;
+        gap: inherit;
+    }
+}

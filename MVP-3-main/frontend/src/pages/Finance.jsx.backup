@@ -1,0 +1,1322 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { Layout } from '../components/Layout';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
+import { Skeleton } from '../components/ui/skeleton';
+import { Textarea } from '../components/ui/textarea';
+import { Switch } from '../components/ui/switch';
+import { Checkbox } from '../components/ui/checkbox';
+import { ScrollArea } from '../components/ui/scroll-area';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '../components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '../components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { toast } from 'sonner';
+import { 
+  Plus, FileText, Send, Trash2, Download, CheckCircle, Clock, AlertCircle,
+  MessageCircle, Mail, X, DollarSign, Receipt, CreditCard, Banknote,
+  Building2, Smartphone, ArrowRight, Loader2, AlertTriangle
+} from 'lucide-react';
+import { format } from 'date-fns';
+import { useAuth } from '../contexts/AuthContext';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+// Servex brand status colors
+const statusConfig = {
+  draft: { bg: 'bg-[#938878]', text: 'text-white', label: 'Draft' },
+  sent: { bg: 'bg-[#E8DC88]', text: 'text-[#3C3F42]', label: 'Sent' },
+  paid: { bg: 'bg-[#5A8F3B]', text: 'text-white', label: 'Paid' },
+  overdue: { bg: 'bg-[#C0392B]', text: 'text-white', label: 'Overdue' }
+};
+
+const paymentMethodConfig = {
+  cash: { icon: Banknote, label: 'Cash' },
+  bank_transfer: { icon: Building2, label: 'Bank Transfer' },
+  mobile_money: { icon: Smartphone, label: 'Mobile Money' },
+  other: { icon: CreditCard, label: 'Other' }
+};
+
+// Exchange rate (ZAR is base currency)
+const KES_RATE = 6.67; // 1 ZAR = 6.67 KES
+
+export function Finance() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  // Data states
+  const [invoices, setInvoices] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Filter states
+  const [tripFilter, setTripFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
+  
+  // Selected invoice state
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
+  const [invoiceData, setInvoiceData] = useState(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  
+  // Create/Edit mode
+  const [isCreating, setIsCreating] = useState(false);
+  const [formData, setFormData] = useState({
+    client_id: '',
+    trip_id: '',
+    display_currency: 'ZAR', // Display currency (ZAR or KES)
+    issue_date: new Date().toISOString().split('T')[0],
+    due_date: ''
+  });
+  
+  // Line items - ALWAYS stored in ZAR (base currency)
+  const [lineItems, setLineItems] = useState([]);
+  // Adjustments - ALWAYS stored in ZAR
+  const [adjustments, setAdjustments] = useState([]);
+  // Client's default rate (fetched from backend)
+  const [clientDefaultRate, setClientDefaultRate] = useState(0);
+  const [hasClientRate, setHasClientRate] = useState(false);
+  
+  // Dialog states
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [parcelsDialogOpen, setParcelsDialogOpen] = useState(false);
+  const [availableParcels, setAvailableParcels] = useState([]);
+  const [selectedParcels, setSelectedParcels] = useState(new Set());
+  
+  // Payment form
+  const [paymentForm, setPaymentForm] = useState({
+    amount: '',
+    payment_date: new Date().toISOString().split('T')[0],
+    payment_method: 'bank_transfer',
+    reference: '',
+    notes: ''
+  });
+  
+  const [submitting, setSubmitting] = useState(false);
+
+  // Currency conversion helper - DISPLAY ONLY, never mutates stored values
+  const toDisplayCurrency = useCallback((zarAmount) => {
+    if (formData.display_currency === 'KES') {
+      return zarAmount * KES_RATE;
+    }
+    return zarAmount;
+  }, [formData.display_currency]);
+
+  const toZAR = useCallback((amount, fromCurrency) => {
+    if (fromCurrency === 'KES') {
+      return amount / KES_RATE;
+    }
+    return amount;
+  }, []);
+
+  const formatCurrency = useCallback((zarAmount) => {
+    const displayAmount = toDisplayCurrency(zarAmount);
+    const symbol = formData.display_currency === 'KES' ? 'KES ' : 'R ';
+    return symbol + (displayAmount || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }, [toDisplayCurrency, formData.display_currency]);
+
+  // Calculate totals (always in ZAR)
+  const totals = useMemo(() => {
+    const subtotal = lineItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+    const adjustmentTotal = adjustments.reduce((sum, adj) => {
+      const amount = parseFloat(adj.amount) || 0;
+      return sum + (adj.is_addition ? amount : -amount);
+    }, 0);
+    return {
+      subtotal,
+      adjustmentTotal,
+      total: subtotal + adjustmentTotal
+    };
+  }, [lineItems, adjustments]);
+
+  // Fetch invoices with filters
+  const fetchInvoices = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (tripFilter !== 'all') params.append('trip_id', tripFilter);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      params.append('sort_by', sortBy);
+      
+      const response = await axios.get(`${API}/invoices-enhanced?${params}`, { withCredentials: true });
+      setInvoices(response.data);
+    } catch (error) {
+      toast.error('Failed to fetch invoices');
+    } finally {
+      setLoading(false);
+    }
+  }, [tripFilter, statusFilter, sortBy]);
+
+  const fetchTripsAndClients = async () => {
+    try {
+      const [tripsRes, clientsRes] = await Promise.all([
+        axios.get(`${API}/trips-dropdown`, { withCredentials: true }),
+        axios.get(`${API}/clients`, { withCredentials: true })
+      ]);
+      setTrips(tripsRes.data);
+      setClients(clientsRes.data);
+    } catch (error) {
+      console.error('Failed to fetch trips/clients');
+    }
+  };
+
+  const fetchClientRate = async (clientId) => {
+    try {
+      const response = await axios.get(`${API}/clients/${clientId}/rate`, { withCredentials: true });
+      if (response.data && response.data.rate_per_kg) {
+        setClientDefaultRate(response.data.rate_per_kg);
+        setHasClientRate(true);
+        return response.data.rate_per_kg;
+      } else {
+        setClientDefaultRate(0);
+        setHasClientRate(false);
+        return 0;
+      }
+    } catch (error) {
+      console.error('Failed to fetch client rate');
+      setClientDefaultRate(0);
+      setHasClientRate(false);
+      return 0;
+    }
+  };
+
+  const fetchInvoiceDetails = async (invoiceId) => {
+    setInvoiceLoading(true);
+    try {
+      const response = await axios.get(`${API}/invoices/${invoiceId}/full`, { withCredentials: true });
+      setInvoiceData(response.data);
+      
+      // Set line items from response
+      const items = (response.data.line_items || []).map(item => ({
+        ...item,
+        amount: parseFloat(item.amount) || (parseFloat(item.weight) || 0) * (parseFloat(item.rate) || 0)
+      }));
+      setLineItems(items);
+      setAdjustments(response.data.adjustments || []);
+      
+      setFormData({
+        client_id: response.data.client_id,
+        trip_id: response.data.trip_id || '',
+        display_currency: response.data.currency || 'ZAR',
+        issue_date: response.data.created_at?.split('T')[0] || '',
+        due_date: response.data.due_date || ''
+      });
+      
+      // Fetch client rate
+      if (response.data.client_id) {
+        await fetchClientRate(response.data.client_id);
+      }
+    } catch (error) {
+      toast.error('Failed to fetch invoice details');
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+    fetchTripsAndClients();
+  }, [fetchInvoices]);
+
+  useEffect(() => {
+    if (selectedInvoiceId) {
+      fetchInvoiceDetails(selectedInvoiceId);
+      setIsCreating(false);
+    }
+  }, [selectedInvoiceId]);
+
+  // Handlers
+  const handleStartCreate = () => {
+    setSelectedInvoiceId(null);
+    setInvoiceData(null);
+    setIsCreating(true);
+    setLineItems([]);
+    setAdjustments([]);
+    setClientDefaultRate(0);
+    setHasClientRate(false);
+    setFormData({
+      client_id: '',
+      trip_id: '',
+      display_currency: 'ZAR',
+      issue_date: new Date().toISOString().split('T')[0],
+      due_date: ''
+    });
+  };
+
+  const handleSelectInvoice = (invoiceId) => {
+    setSelectedInvoiceId(invoiceId);
+    setIsCreating(false);
+  };
+
+  const handleClientChange = async (clientId) => {
+    setFormData(prev => ({ ...prev, client_id: clientId }));
+    
+    // Get client's payment terms for due date
+    const client = clients.find(c => c.id === clientId);
+    if (client) {
+      const issueDate = new Date(formData.issue_date);
+      const daysToAdd = client.payment_terms_days || 30;
+      const dueDate = new Date(issueDate);
+      dueDate.setDate(dueDate.getDate() + daysToAdd);
+      setFormData(prev => ({ ...prev, due_date: dueDate.toISOString().split('T')[0] }));
+      
+      // Set default currency if client has one
+      if (client.default_currency) {
+        setFormData(prev => ({ ...prev, display_currency: client.default_currency }));
+      }
+    }
+    
+    // Fetch client's default rate
+    const rate = await fetchClientRate(clientId);
+    
+    // Update existing line items with new rate if they have rate = 0
+    if (rate > 0) {
+      setLineItems(prev => prev.map(item => {
+        if (!item.rate || item.rate === 0) {
+          const newAmount = (parseFloat(item.weight) || 0) * rate;
+          return { ...item, rate, amount: newAmount };
+        }
+        return item;
+      }));
+    }
+  };
+
+  const handleCurrencyToggle = () => {
+    // Toggle display currency - DON'T mutate stored values
+    setFormData(prev => ({
+      ...prev,
+      display_currency: prev.display_currency === 'ZAR' ? 'KES' : 'ZAR'
+    }));
+    // Line items and adjustments stay in ZAR - only display changes
+  };
+
+  const handleAddLineItem = () => {
+    const newItem = {
+      id: `temp-${Date.now()}`,
+      description: '',
+      weight: 0,
+      rate: clientDefaultRate, // Use client's default rate
+      amount: 0
+    };
+    setLineItems(prev => [...prev, newItem]);
+  };
+
+  const handleLineItemChange = (index, field, value) => {
+    setLineItems(prev => {
+      const updated = [...prev];
+      const numValue = parseFloat(value) || 0;
+      
+      if (field === 'weight') {
+        updated[index].weight = numValue;
+        updated[index].amount = numValue * (parseFloat(updated[index].rate) || 0);
+      } else if (field === 'rate') {
+        updated[index].rate = numValue;
+        updated[index].amount = (parseFloat(updated[index].weight) || 0) * numValue;
+      } else if (field === 'description') {
+        updated[index].description = value;
+      }
+      
+      return updated;
+    });
+  };
+
+  const handleRemoveLineItem = (index) => {
+    setLineItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddAdjustment = () => {
+    setAdjustments(prev => [...prev, {
+      id: `temp-${Date.now()}`,
+      description: '',
+      amount: 0,
+      is_addition: true
+    }]);
+  };
+
+  const handleAdjustmentChange = (index, field, value) => {
+    setAdjustments(prev => {
+      const updated = [...prev];
+      if (field === 'amount') {
+        updated[index].amount = parseFloat(value) || 0;
+      } else if (field === 'is_addition') {
+        updated[index].is_addition = value;
+      } else {
+        updated[index][field] = value;
+      }
+      return updated;
+    });
+  };
+
+  const handleRemoveAdjustment = (index) => {
+    setAdjustments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleLoadParcels = async () => {
+    if (!formData.trip_id) {
+      toast.error('Please select a trip first');
+      return;
+    }
+    
+    try {
+      const params = formData.client_id ? `?client_id=${formData.client_id}` : '';
+      const response = await axios.get(`${API}/trips/${formData.trip_id}/parcels-for-invoice${params}`, { withCredentials: true });
+      setAvailableParcels(response.data);
+      setSelectedParcels(new Set());
+      setParcelsDialogOpen(true);
+    } catch (error) {
+      toast.error('Failed to load parcels');
+    }
+  };
+
+  const handleAddSelectedParcels = () => {
+    const newItems = availableParcels
+      .filter(p => selectedParcels.has(p.id))
+      .map(p => {
+        // Use client's default rate if parcel doesn't have one
+        const rate = p.default_rate || clientDefaultRate || 0;
+        const weight = parseFloat(p.total_weight) || 0;
+        const amount = weight * rate;
+        
+        return {
+          id: `temp-${Date.now()}-${p.id}`,
+          shipment_id: p.id,
+          description: `Parcel ${p.id.slice(0, 8)} - ${p.description || 'Shipment'}`,
+          weight: weight,
+          rate: rate,
+          amount: amount
+        };
+      });
+    
+    if (newItems.length === 0) {
+      toast.error('No parcels selected');
+      return;
+    }
+    
+    console.log('Adding line items:', newItems); // Debug log
+    setLineItems(prev => [...prev, ...newItems]);
+    setParcelsDialogOpen(false);
+    toast.success(`Added ${newItems.length} parcel(s)`);
+  };
+
+  const handleSaveInvoice = async (finalize = false) => {
+    if (!formData.client_id) {
+      toast.error('Please select a client');
+      return;
+    }
+    
+    if (lineItems.length === 0) {
+      toast.error('Please add at least one line item');
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      if (isCreating) {
+        // Create new invoice
+        const invoicePayload = {
+          client_id: formData.client_id,
+          trip_id: formData.trip_id || null,
+          subtotal: totals.subtotal,
+          adjustments: totals.adjustmentTotal,
+          currency: formData.display_currency // Store the display currency
+        };
+        
+        const invoiceRes = await axios.post(`${API}/invoices`, invoicePayload, { withCredentials: true });
+        const newInvoiceId = invoiceRes.data.id;
+        
+        // Add line items
+        for (const item of lineItems) {
+          await axios.post(`${API}/invoices/${newInvoiceId}/items`, {
+            shipment_id: item.shipment_id || null,
+            description: item.description,
+            quantity: 1,
+            weight: item.weight,
+            rate: item.rate
+          }, { withCredentials: true });
+        }
+        
+        // Add adjustments
+        for (const adj of adjustments) {
+          await axios.post(`${API}/invoices/${newInvoiceId}/adjustments`, {
+            description: adj.description,
+            amount: adj.amount,
+            is_addition: adj.is_addition
+          }, { withCredentials: true });
+        }
+        
+        if (finalize) {
+          await axios.post(`${API}/invoices/${newInvoiceId}/finalize`, {}, { withCredentials: true });
+        }
+        
+        toast.success(`Invoice ${finalize ? 'created and finalized' : 'saved as draft'}`);
+        setSelectedInvoiceId(newInvoiceId);
+        setIsCreating(false);
+      } else if (invoiceData?.status === 'draft') {
+        // Update existing draft
+        await axios.put(`${API}/invoices/${selectedInvoiceId}`, {
+          subtotal: totals.subtotal,
+          adjustments: totals.adjustmentTotal,
+          currency: formData.display_currency
+        }, { withCredentials: true });
+        
+        if (finalize) {
+          await axios.post(`${API}/invoices/${selectedInvoiceId}/finalize`, {}, { withCredentials: true });
+        }
+        
+        toast.success(`Invoice ${finalize ? 'finalized' : 'updated'}`);
+        fetchInvoiceDetails(selectedInvoiceId);
+      }
+      
+      fetchInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save invoice');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRecordPayment = async (e) => {
+    e.preventDefault();
+    if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
+      toast.error('Please enter a valid amount');
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      await axios.post(`${API}/invoices/${selectedInvoiceId}/record-payment`, {
+        amount: parseFloat(paymentForm.amount),
+        payment_date: paymentForm.payment_date,
+        payment_method: paymentForm.payment_method,
+        reference: paymentForm.reference,
+        notes: paymentForm.notes
+      }, { withCredentials: true });
+      
+      toast.success('Payment recorded');
+      setPaymentDialogOpen(false);
+      setPaymentForm({
+        amount: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        payment_method: 'bank_transfer',
+        reference: '',
+        notes: ''
+      });
+      fetchInvoiceDetails(selectedInvoiceId);
+      fetchInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to record payment');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    if (!invoiceData) return;
+    
+    const client = invoiceData.client;
+    const phone = client?.whatsapp || client?.phone || '';
+    const displayTotal = formatCurrency(invoiceData.total);
+    const message = encodeURIComponent(
+      `Hi ${client?.name || 'Client'},\n\nYour invoice ${invoiceData.invoice_number} for ${displayTotal} is ready.\n\nDue date: ${invoiceData.due_date ? format(new Date(invoiceData.due_date), 'MMM d, yyyy') : 'N/A'}\n\nThank you for your business!\n\n- Servex Holdings`
+    );
+    
+    // Log to database
+    try {
+      await axios.post(`${API}/invoices/${selectedInvoiceId}/log-whatsapp`, {
+        to_number: phone,
+        message: decodeURIComponent(message)
+      }, { withCredentials: true });
+    } catch (error) {
+      console.error('Failed to log WhatsApp');
+    }
+    
+    // Open WhatsApp
+    const whatsappUrl = `https://web.whatsapp.com/send?phone=${phone.replace(/\D/g, '')}&text=${message}`;
+    window.open(whatsappUrl, '_blank');
+    
+    toast.success('WhatsApp opened - message logged');
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!selectedInvoiceId) return;
+    
+    try {
+      const response = await axios.get(`${API}/invoices/${selectedInvoiceId}/pdf`, {
+        withCredentials: true,
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Invoice-${invoiceData?.invoice_number || 'unknown'}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Invoice downloaded');
+    } catch (error) {
+      toast.error('Failed to download invoice');
+      console.error('PDF download error:', error);
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!window.confirm('Delete this invoice? This cannot be undone.')) return;
+    
+    try {
+      await axios.delete(`${API}/invoices/${selectedInvoiceId}`, { withCredentials: true });
+      toast.success('Invoice deleted');
+      setSelectedInvoiceId(null);
+      setInvoiceData(null);
+      fetchInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete invoice');
+    }
+  };
+
+  const isOwner = user?.role === 'owner';
+  const isDraft = invoiceData?.status === 'draft' || isCreating;
+
+  return (
+    <Layout>
+      <div className="flex h-[calc(100vh-64px)]" data-testid="finance-hub">
+        {/* LEFT PANEL - Invoice List (40%) */}
+        <div className="w-[40%] border-r bg-white flex flex-col">
+          {/* Header */}
+          <div className="p-4 border-b">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-2xl font-bold text-[#3C3F42]">Invoices</h1>
+              <Button 
+                className="bg-[#6B633C] hover:bg-[#5a5332]"
+                onClick={handleStartCreate}
+                data-testid="new-invoice-btn"
+              >
+                <Plus className="h-4 w-4 mr-1" /> New Invoice
+              </Button>
+            </div>
+            
+            {/* Filters */}
+            <div className="flex gap-2">
+              <Select value={tripFilter} onValueChange={setTripFilter}>
+                <SelectTrigger className="flex-1" data-testid="trip-filter">
+                  <SelectValue placeholder="All Trips" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Trips</SelectItem>
+                  {trips.map(trip => (
+                    <SelectItem key={trip.id} value={trip.id}>{trip.trip_number}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="flex-1" data-testid="status-filter">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="sent">Sent</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-[130px]" data-testid="sort-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest</SelectItem>
+                  <SelectItem value="oldest">Oldest</SelectItem>
+                  <SelectItem value="amount_high">Amount ↓</SelectItem>
+                  <SelectItem value="amount_low">Amount ↑</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          {/* Invoice List */}
+          <ScrollArea className="flex-1">
+            {loading ? (
+              <div className="p-4 space-y-4">
+                {[1, 2, 3, 4].map(i => (
+                  <Skeleton key={i} className="h-[140px]" />
+                ))}
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                <FileText className="h-16 w-16 text-gray-300 mb-4" />
+                <h3 className="text-lg font-medium text-[#3C3F42] mb-2">No invoices yet</h3>
+                <p className="text-gray-500 mb-4">Generate invoices from trips or create manually</p>
+                <Button className="bg-[#6B633C] hover:bg-[#5a5332]" onClick={handleStartCreate}>
+                  <Plus className="h-4 w-4 mr-1" /> New Invoice
+                </Button>
+              </div>
+            ) : (
+              <div className="p-4 space-y-3">
+                {invoices.map(invoice => {
+                  const status = statusConfig[invoice.display_status] || statusConfig.draft;
+                  const isSelected = selectedInvoiceId === invoice.id;
+                  
+                  return (
+                    <Card 
+                      key={invoice.id}
+                      className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-[#6B633C]' : ''}`}
+                      onClick={() => handleSelectInvoice(invoice.id)}
+                      data-testid={`invoice-card-${invoice.invoice_number}`}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h3 className="font-bold text-[#3C3F42]">{invoice.invoice_number}</h3>
+                            <p className="text-sm text-gray-600">{invoice.client_name}</p>
+                          </div>
+                          <Badge className={`${status.bg} ${status.text} border-0`}>
+                            {status.label}
+                          </Badge>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 mb-2">
+                          {invoice.trip_number && (
+                            <Badge variant="outline" className="text-xs cursor-pointer hover:bg-gray-100"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/trips/${invoice.trip_id}`); }}>
+                              {invoice.trip_number}
+                            </Badge>
+                          )}
+                          <span className="text-xs text-gray-400">
+                            {invoice.created_at && format(new Date(invoice.created_at), 'MMM d, yyyy')}
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <span className="text-xl font-bold text-[#6B633C]">
+                            {invoice.currency === 'KES' ? 'KES ' : 'R '}{(invoice.total || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleSelectInvoice(invoice.id); }}>
+                              <MessageCircle className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Mail className="h-4 w-4 text-blue-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Download className="h-4 w-4 text-gray-600" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+
+        {/* RIGHT PANEL - Invoice Drawer (60%) */}
+        <div className="w-[60%] bg-[#f5f5f5] flex flex-col overflow-hidden">
+          {!selectedInvoiceId && !isCreating ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <FileText className="h-20 w-20 text-gray-300 mb-4" />
+              <h3 className="text-xl font-medium text-[#3C3F42] mb-2">Select an invoice to view details</h3>
+              <p className="text-gray-500">Or create a new invoice from a trip</p>
+            </div>
+          ) : invoiceLoading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-[#6B633C]" />
+            </div>
+          ) : (
+            <ScrollArea className="flex-1">
+              <div className="p-6 space-y-6">
+                {/* Header */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold text-[#3C3F42]">
+                      {isCreating ? 'New Invoice' : invoiceData?.invoice_number}
+                    </h2>
+                    {!isCreating && invoiceData && (
+                      <Badge className={`${statusConfig[invoiceData.display_status]?.bg} ${statusConfig[invoiceData.display_status]?.text} border-0 mt-2`}>
+                        {statusConfig[invoiceData.display_status]?.label}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {/* Currency Toggle - DISPLAY ONLY */}
+                  <div className="flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm">
+                    <span className={`text-sm font-medium ${formData.display_currency === 'ZAR' ? 'text-[#6B633C]' : 'text-gray-400'}`}>ZAR</span>
+                    <Switch
+                      checked={formData.display_currency === 'KES'}
+                      onCheckedChange={handleCurrencyToggle}
+                      disabled={!isDraft}
+                      data-testid="currency-toggle"
+                    />
+                    <span className={`text-sm font-medium ${formData.display_currency === 'KES' ? 'text-[#6B633C]' : 'text-gray-400'}`}>KES</span>
+                    <span className="text-xs text-gray-400 ml-2">
+                      1 ZAR = {KES_RATE} KES
+                    </span>
+                  </div>
+                </div>
+
+                {/* Client & Trip Selection */}
+                <Card className="bg-white">
+                  <CardContent className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Client *</Label>
+                        <Select 
+                          value={formData.client_id} 
+                          onValueChange={handleClientChange}
+                          disabled={!isDraft}
+                        >
+                          <SelectTrigger data-testid="client-select">
+                            <SelectValue placeholder="Select client" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {clients.map(client => (
+                              <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {formData.client_id && !hasClientRate && (
+                          <div className="flex items-center gap-1 mt-1 text-amber-600 text-xs">
+                            <AlertTriangle className="h-3 w-3" />
+                            No default rate set for this client
+                          </div>
+                        )}
+                        {formData.client_id && hasClientRate && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Default rate: R {clientDefaultRate}/kg
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <Label>Trip (optional)</Label>
+                        <Select 
+                          value={formData.trip_id || 'none'} 
+                          onValueChange={(v) => setFormData(prev => ({ ...prev, trip_id: v === 'none' ? '' : v }))}
+                          disabled={!isDraft}
+                        >
+                          <SelectTrigger data-testid="trip-select">
+                            <SelectValue placeholder="Select trip" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No trip</SelectItem>
+                            {trips.map(trip => (
+                              <SelectItem key={trip.id} value={trip.id}>{trip.trip_number}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Issue Date</Label>
+                        <Input
+                          type="date"
+                          value={formData.issue_date}
+                          onChange={(e) => setFormData(prev => ({ ...prev, issue_date: e.target.value }))}
+                          disabled={!isDraft}
+                        />
+                      </div>
+                      <div>
+                        <Label>Due Date</Label>
+                        <Input
+                          type="date"
+                          value={formData.due_date}
+                          onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                          disabled={!isDraft}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Line Items */}
+                <Card className="bg-white">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-lg">Line Items ({lineItems.length})</CardTitle>
+                    {isDraft && (
+                      <div className="flex gap-2">
+                        {formData.trip_id && (
+                          <Button variant="outline" size="sm" onClick={handleLoadParcels} data-testid="add-from-trip-btn">
+                            <Plus className="h-4 w-4 mr-1" /> Add from Trip
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" onClick={handleAddLineItem} data-testid="add-line-item-btn">
+                          <Plus className="h-4 w-4 mr-1" /> Add Item
+                        </Button>
+                      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[40%]">Description</TableHead>
+                          <TableHead className="w-[15%]">Weight (kg)</TableHead>
+                          <TableHead className="w-[15%]">Rate ({formData.display_currency === 'KES' ? 'KES' : 'R'})</TableHead>
+                          <TableHead className="w-[20%]">Amount</TableHead>
+                          {isDraft && <TableHead className="w-[10%]"></TableHead>}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {lineItems.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={isDraft ? 5 : 4} className="text-center py-8 text-gray-500">
+                              No line items. {isDraft && 'Add items manually or from a trip.'}
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          lineItems.map((item, index) => (
+                            <TableRow key={item.id || index}>
+                              <TableCell>
+                                {isDraft ? (
+                                  <Input
+                                    value={item.description || ''}
+                                    onChange={(e) => handleLineItemChange(index, 'description', e.target.value)}
+                                    placeholder="Description"
+                                    className="h-8"
+                                  />
+                                ) : (
+                                  item.description
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {isDraft ? (
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={item.weight || ''}
+                                    onChange={(e) => handleLineItemChange(index, 'weight', e.target.value)}
+                                    className="h-8"
+                                  />
+                                ) : (
+                                  item.weight
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {isDraft ? (
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={toDisplayCurrency(item.rate || 0).toFixed(2)}
+                                    onChange={(e) => {
+                                      // Convert input back to ZAR for storage
+                                      const inputValue = parseFloat(e.target.value) || 0;
+                                      const zarValue = formData.display_currency === 'KES' ? inputValue / KES_RATE : inputValue;
+                                      handleLineItemChange(index, 'rate', zarValue);
+                                    }}
+                                    className="h-8"
+                                  />
+                                ) : (
+                                  formatCurrency(item.rate || 0)
+                                )}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {formatCurrency(item.amount || 0)}
+                              </TableCell>
+                              {isDraft && (
+                                <TableCell>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRemoveLineItem(index)}>
+                                    <X className="h-4 w-4 text-red-500" />
+                                  </Button>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Adjustments */}
+                <Card className="bg-white">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-lg">Adjustments</CardTitle>
+                    {isDraft && (
+                      <Button variant="outline" size="sm" onClick={handleAddAdjustment}>
+                        <Plus className="h-4 w-4 mr-1" /> Add Adjustment
+                      </Button>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    {adjustments.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">No adjustments</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {adjustments.map((adj, index) => (
+                          <div key={adj.id || index} className="flex items-center gap-2">
+                            <Input
+                              value={adj.description || ''}
+                              onChange={(e) => handleAdjustmentChange(index, 'description', e.target.value)}
+                              placeholder="Description"
+                              className="flex-1"
+                              disabled={!isDraft}
+                            />
+                            <Select
+                              value={adj.is_addition ? 'add' : 'subtract'}
+                              onValueChange={(v) => handleAdjustmentChange(index, 'is_addition', v === 'add')}
+                              disabled={!isDraft}
+                            >
+                              <SelectTrigger className="w-[80px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="add">+</SelectItem>
+                                <SelectItem value="subtract">-</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={toDisplayCurrency(adj.amount || 0).toFixed(2)}
+                              onChange={(e) => {
+                                const inputValue = parseFloat(e.target.value) || 0;
+                                const zarValue = formData.display_currency === 'KES' ? inputValue / KES_RATE : inputValue;
+                                handleAdjustmentChange(index, 'amount', zarValue);
+                              }}
+                              className="w-[120px]"
+                              disabled={!isDraft}
+                            />
+                            {isDraft && (
+                              <Button variant="ghost" size="icon" onClick={() => handleRemoveAdjustment(index)}>
+                                <X className="h-4 w-4 text-red-500" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Totals */}
+                <Card className="bg-white">
+                  <CardContent className="p-4">
+                    <div className="space-y-2 text-right">
+                      <div className="flex justify-end gap-8">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium w-32">{formatCurrency(totals.subtotal)}</span>
+                      </div>
+                      <div className="flex justify-end gap-8">
+                        <span className="text-gray-600">Adjustments:</span>
+                        <span className={`font-medium w-32 ${totals.adjustmentTotal < 0 ? 'text-red-600' : ''}`}>
+                          {totals.adjustmentTotal >= 0 ? '+' : ''}{formatCurrency(totals.adjustmentTotal)}
+                        </span>
+                      </div>
+                      <div className="flex justify-end gap-8 pt-2 border-t">
+                        <span className="text-xl font-bold text-[#3C3F42]">TOTAL:</span>
+                        <span className="text-2xl font-bold text-[#6B633C] w-32">{formatCurrency(totals.total)}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Payment Tracking */}
+                {!isCreating && invoiceData && (
+                  <Card className="bg-white">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Receipt className="h-5 w-5" /> Payment Status
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {invoiceData.status === 'paid' || invoiceData.paid_amount >= invoiceData.total ? (
+                        <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg">
+                          <CheckCircle className="h-8 w-8 text-green-600" />
+                          <div>
+                            <p className="font-medium text-green-800">Fully Paid</p>
+                            {invoiceData.paid_at && (
+                              <p className="text-sm text-green-600">
+                                Paid on {format(new Date(invoiceData.paid_at), 'MMM d, yyyy')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Paid:</span>
+                            <span className="font-medium text-green-600">{formatCurrency(invoiceData.paid_amount || 0)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-600">Outstanding:</span>
+                            <span className="font-medium text-red-600">{formatCurrency(invoiceData.outstanding || invoiceData.total)}</span>
+                          </div>
+                          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-green-500 transition-all"
+                              style={{ width: `${((invoiceData.paid_amount || 0) / invoiceData.total) * 100}%` }}
+                            />
+                          </div>
+                          <Button 
+                            className="w-full bg-[#6B633C] hover:bg-[#5a5332]"
+                            onClick={() => {
+                              setPaymentForm(prev => ({ ...prev, amount: invoiceData.outstanding || invoiceData.total }));
+                              setPaymentDialogOpen(true);
+                            }}
+                            data-testid="record-payment-btn"
+                          >
+                            <DollarSign className="h-4 w-4 mr-1" /> Record Payment
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {/* Payment History */}
+                      {invoiceData.payments && invoiceData.payments.length > 0 && (
+                        <div className="mt-4 pt-4 border-t">
+                          <h4 className="font-medium mb-2">Payment History</h4>
+                          <div className="space-y-2">
+                            {invoiceData.payments.map(payment => {
+                              const MethodIcon = paymentMethodConfig[payment.payment_method]?.icon || CreditCard;
+                              return (
+                                <div key={payment.id} className="flex items-center justify-between text-sm p-2 bg-gray-50 rounded">
+                                  <div className="flex items-center gap-2">
+                                    <MethodIcon className="h-4 w-4 text-gray-500" />
+                                    <span>{format(new Date(payment.payment_date), 'MMM d, yyyy')}</span>
+                                  </div>
+                                  <span className="font-medium">{formatCurrency(payment.amount)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div>
+                    {!isCreating && isOwner && invoiceData?.status === 'draft' && (
+                      <Button variant="destructive" onClick={handleDeleteInvoice}>
+                        <Trash2 className="h-4 w-4 mr-1" /> Delete
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    {isDraft ? (
+                      <>
+                        <Button variant="outline" onClick={() => handleSaveInvoice(false)} disabled={submitting}>
+                          Save as Draft
+                        </Button>
+                        <Button 
+                          className="bg-[#6B633C] hover:bg-[#5a5332]" 
+                          onClick={() => handleSaveInvoice(true)}
+                          disabled={submitting}
+                          data-testid="finalize-btn"
+                        >
+                          {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                          Finalize Invoice
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          onClick={handleDownloadPDF}
+                          data-testid="download-pdf-btn"
+                        >
+                          <Download className="h-4 w-4 mr-1" /> PDF
+                        </Button>
+                        <Button variant="outline">
+                          <Mail className="h-4 w-4 mr-1" /> Email
+                        </Button>
+                        <Button 
+                          className="bg-[#25D366] hover:bg-[#128C7E] text-white"
+                          onClick={handleWhatsApp}
+                          data-testid="whatsapp-btn"
+                        >
+                          <MessageCircle className="h-4 w-4 mr-1" /> WhatsApp
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
+        {/* Payment Dialog */}
+        <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Record Payment</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleRecordPayment} className="space-y-4">
+              <div>
+                <Label>Amount *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={paymentForm.amount}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+              <div>
+                <Label>Payment Date</Label>
+                <Input
+                  type="date"
+                  value={paymentForm.payment_date}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, payment_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Payment Method</Label>
+                <Select value={paymentForm.payment_method} onValueChange={(v) => setPaymentForm(prev => ({ ...prev, payment_method: v }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Reference (optional)</Label>
+                <Input
+                  value={paymentForm.reference}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, reference: e.target.value }))}
+                  placeholder="Transaction reference"
+                />
+              </div>
+              <div>
+                <Label>Notes (optional)</Label>
+                <Textarea
+                  value={paymentForm.notes}
+                  onChange={(e) => setPaymentForm(prev => ({ ...prev, notes: e.target.value }))}
+                  rows={2}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+                <Button type="submit" className="bg-[#6B633C] hover:bg-[#5a5332]" disabled={submitting}>
+                  {submitting ? 'Recording...' : 'Record Payment'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Parcels Selection Dialog */}
+        <Dialog open={parcelsDialogOpen} onOpenChange={setParcelsDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Add Parcels from Trip</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[400px] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectedParcels.size === availableParcels.length && availableParcels.length > 0}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedParcels(new Set(availableParcels.map(p => p.id)));
+                          } else {
+                            setSelectedParcels(new Set());
+                          }
+                        }}
+                      />
+                    </TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Weight</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead>Est. Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {availableParcels.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        No parcels found for this trip
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    availableParcels.map(parcel => {
+                      const rate = parcel.default_rate || clientDefaultRate || 0;
+                      const weight = parseFloat(parcel.total_weight) || 0;
+                      const amount = weight * rate;
+                      return (
+                        <TableRow key={parcel.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedParcels.has(parcel.id)}
+                              onCheckedChange={(checked) => {
+                                const newSelected = new Set(selectedParcels);
+                                if (checked) newSelected.add(parcel.id);
+                                else newSelected.delete(parcel.id);
+                                setSelectedParcels(newSelected);
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>{parcel.client_name}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{parcel.description || 'Shipment'}</TableCell>
+                          <TableCell>{weight} kg</TableCell>
+                          <TableCell>{formatCurrency(rate)}/kg</TableCell>
+                          <TableCell className="font-medium">
+                            {formatCurrency(amount)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setParcelsDialogOpen(false)}>Cancel</Button>
+              <Button 
+                className="bg-[#6B633C] hover:bg-[#5a5332]"
+                onClick={handleAddSelectedParcels}
+                disabled={selectedParcels.size === 0}
+                data-testid="add-parcels-btn"
+              >
+                Add {selectedParcels.size} Parcel(s)
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </Layout>
+  );
+}
+
+export default Finance;
