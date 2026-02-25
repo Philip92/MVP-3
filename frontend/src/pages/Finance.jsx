@@ -766,9 +766,26 @@ Servex Holdings`;
                                         </Badge>
                                       </td>
                                       <td className="px-2 py-1">
-                                        <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => openEmailModal({ ...inv, client_name: s.client_name, client_email: s.client_email })}>
-                                          <Mail className="h-3 w-3" />
-                                        </Button>
+                                        <div className="flex items-center gap-1">
+                                          <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => openEmailModal({ ...inv, client_name: s.client_name, client_email: s.client_email })} title="Send Email">
+                                            <Mail className="h-3 w-3" />
+                                          </Button>
+                                          <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                              <Button variant="ghost" size="sm" className="h-5 w-5 p-0" title="Download PDF">
+                                                <Download className="h-3 w-3" />
+                                              </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                              <DropdownMenuItem onClick={() => handleDownloadPdf(inv.id, 'type1')} data-testid={`download-pdf-type1-${inv.id}`}>
+                                                <Download className="h-3 w-3 mr-2" /> PDF Type 1 (Standard)
+                                              </DropdownMenuItem>
+                                              <DropdownMenuItem onClick={() => handleDownloadPdf(inv.id, 'type2')} data-testid={`download-pdf-type2-${inv.id}`}>
+                                                <Download className="h-3 w-3 mr-2" /> PDF Type 2 (Servex Branded)
+                                              </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                          </DropdownMenu>
+                                        </div>
                                       </td>
                                     </tr>
                                   ))}
