@@ -1319,6 +1319,38 @@ async def get_manifest_excel(trip_id: str, tenant_id: str = Depends(get_tenant_i
     buf.seek(0)
     filename = f"Manifest-{trip_number}.xlsx"
     return StreamingResponse(
+
+
+# ============ LABELS PDF ============
+
+@router.get("/trips/{trip_id}/labels/pdf")
+async def get_trip_labels_pdf(
+    trip_id: str,
+    tenant_id: str = Depends(get_tenant_id)
+):
+    """Generate labels PDF for all shipments in trip."""
+    from services.pdf_service import generate_labels_pdf
+
+    shipments = await db.shipments.find(
+        {"trip_id": trip_id, "tenant_id": tenant_id},
+        {"_id": 0}
+    ).to_list(None)
+
+    if not shipments:
+        raise HTTPException(404, "No shipments in this trip")
+
+    shipment_ids = [s["id"] for s in shipments]
+    pdf_buffer = await generate_labels_pdf(shipment_ids, tenant_id)
+
+    trip = await db.trips.find_one({"id": trip_id, "tenant_id": tenant_id})
+    trip_number = trip.get("trip_number", trip_id) if trip else trip_id
+
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=labels_{trip_number}.pdf"}
+    )
+
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
