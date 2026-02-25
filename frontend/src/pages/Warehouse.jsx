@@ -891,6 +891,14 @@ export function Warehouse() {
               <Copy className="h-4 w-4 mr-2" />
               Find Duplicates
             </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleExportExcel}
+              data-testid="export-excel-btn"
+            >
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Export Excel
+            </Button>
             <Button onClick={() => navigate('/parcels/intake')} data-testid="add-parcel-btn">
               <Package className="h-4 w-4 mr-2" />
               Add Parcel
