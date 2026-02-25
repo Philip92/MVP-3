@@ -1854,13 +1854,24 @@ export function InvoiceEditor() {
                 )}
                 {selectedInvoiceId && (
                   <>
-                    <Button
-                      variant="outline"
-                      onClick={() => downloadPdf(selectedInvoiceId)}
-                      data-testid="download-pdf-btn"
-                    >
-                      <Download className="h-4 w-4 mr-2" /> Download PDF
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          data-testid="download-pdf-btn"
+                        >
+                          <Download className="h-4 w-4 mr-2" /> Download PDF
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => downloadPdf(selectedInvoiceId, 'type1')} data-testid="download-pdf-type1">
+                          <Download className="h-4 w-4 mr-2" /> PDF Type 1 (Standard)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => downloadPdf(selectedInvoiceId, 'type2')} data-testid="download-pdf-type2">
+                          <Download className="h-4 w-4 mr-2" /> PDF Type 2 (Servex Branded)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     {invoiceData?.status !== 'paid' && invoiceData?.status !== 'draft' && (
                       <Button
                         variant="outline"
