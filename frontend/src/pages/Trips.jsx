@@ -32,7 +32,7 @@ import {
 import { toast } from 'sonner';
 import { 
   Plus, MoreVertical, Edit, Trash2, Truck, Eye, Package, 
-  Users, DollarSign, Weight, Copy, Lock, X, GripVertical, Calendar, Search, ArrowUpDown
+  Users, DollarSign, Weight, Copy, Lock, X, GripVertical, Calendar, Search, ArrowUpDown, Box
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
