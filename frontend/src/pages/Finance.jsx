@@ -1136,6 +1136,21 @@ Servex Holdings`;
                               >
                                 <Mail className="h-3 w-3" />
                               </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="outline" size="sm" title="Download PDF">
+                                    <Download className="h-3 w-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleDownloadPdf(inv.id, 'type1')}>
+                                    <Download className="h-3 w-3 mr-2" /> PDF Type 1
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleDownloadPdf(inv.id, 'type2')}>
+                                    <Download className="h-3 w-3 mr-2" /> PDF Type 2 (Servex)
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                               <Button 
                                 variant="outline" 
                                 size="sm"
