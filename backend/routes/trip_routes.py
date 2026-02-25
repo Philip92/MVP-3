@@ -514,12 +514,27 @@ async def list_trips_with_stats(
         
         # Get vehicle and driver info
         vehicle = None
+        vehicle_capacity_kg = trip.get("capacity_kg") or 0
+        vehicle_capacity_cbm = trip.get("capacity_cbm") or 0
         if trip.get("vehicle_id"):
-            vehicle = await db.vehicles.find_one({"id": trip["vehicle_id"]}, {"_id": 0, "registration_number": 1, "vehicle_type": 1})
+            vehicle = await db.vehicles.find_one({"id": trip["vehicle_id"]}, {"_id": 0, "registration_number": 1, "vehicle_type": 1, "max_weight_kg": 1, "max_volume_cbm": 1, "name": 1})
+            # Use vehicle capacity as fallback if trip doesn't have it set
+            if vehicle:
+                if not vehicle_capacity_kg and vehicle.get("max_weight_kg"):
+                    vehicle_capacity_kg = vehicle["max_weight_kg"]
+                if not vehicle_capacity_cbm and vehicle.get("max_volume_cbm"):
+                    vehicle_capacity_cbm = vehicle["max_volume_cbm"]
         
         driver = None
         if trip.get("driver_id"):
             driver = await db.drivers.find_one({"id": trip["driver_id"]}, {"_id": 0, "name": 1, "phone": 1})
+        
+        # Calculate total CBM for parcels
+        cbm_shipments = await db.shipments.find(
+            {"trip_id": trip["id"], "tenant_id": tenant_id},
+            {"_id": 0, "total_cbm": 1}
+        ).to_list(2000)
+        total_cbm = sum(s.get("total_cbm", 0) or 0 for s in cbm_shipments)
         
         result.append({
             **trip,
@@ -528,10 +543,13 @@ async def list_trips_with_stats(
             "stats": {
                 "total_parcels": total_parcels,
                 "total_weight": round(total_weight, 2),
+                "total_cbm": round(total_cbm, 4),
                 "total_clients": len(unique_clients),
                 "invoiced_value": round(invoiced_value, 2),
                 "loaded_parcels": loaded_parcels,
-                "loading_percentage": loading_percentage
+                "loading_percentage": loading_percentage,
+                "capacity_kg": vehicle_capacity_kg,
+                "capacity_cbm": vehicle_capacity_cbm
             }
         })
     
