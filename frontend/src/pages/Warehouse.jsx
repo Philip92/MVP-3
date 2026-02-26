@@ -627,12 +627,46 @@ export function Warehouse() {
     }
   };
 
-  const handleExportExcel = () => {
-    const params = new URLSearchParams();
-    if (selectedWarehouse !== 'all') params.append('warehouse_id', selectedWarehouse);
-    if (activeFilters.length > 0) params.append('status', activeFilters.join(','));
-    if (searchQuery) params.append('search', searchQuery);
-    window.open(`${API}/warehouse/export/excel?${params.toString()}`, '_blank');
+  const handleExportExcel = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (selectedWarehouse && selectedWarehouse !== 'all') params.append('warehouse_id', selectedWarehouse);
+      if (activeFilters.status && activeFilters.status.length > 0) params.append('status', activeFilters.status.join(','));
+      if (search) params.append('search', search);
+
+      const response = await axios.get(
+        `${API}/warehouse/export/excel?${params.toString()}`,
+        { withCredentials: true, responseType: 'blob' }
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `warehouse_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Warehouse data exported');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error(error.response?.data?.detail || 'Failed to export warehouse data');
+    }
+  };
+
+  const handleViewLabel = async (parcel) => {
+    try {
+      const response = await axios.post(
+        `${API}/warehouse/labels/pdf`,
+        { shipment_ids: [parcel.id] },
+        { withCredentials: true, responseType: 'blob' }
+      );
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (error) {
+      toast.error('Failed to generate label');
+    }
   };
 
   const handleSingleDelete = async (parcelId) => {
