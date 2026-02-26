@@ -49,15 +49,16 @@ import { cn } from '../lib/utils';
 
 const API = `${window.location.origin}/api`;
 
-// Default exchange rate
-const DEFAULT_KES_RATE = 6.67;
+// Default exchange rates
+const DEFAULT_RATES = { KES: 6.67, USD: 0.054, EUR: 0.050, GBP: 0.043 };
 
 // Format currency with conversion
-const formatCurrency = (amount, currency = 'ZAR', exchangeRate = DEFAULT_KES_RATE) => {
+const formatCurrency = (amount, currency = 'ZAR', rates = DEFAULT_RATES) => {
   const num = parseFloat(amount) || 0;
-  if (currency === 'KES') {
-    const kesAmount = num * exchangeRate;
-    return 'KES ' + kesAmount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (currency !== 'ZAR' && rates[currency]) {
+    const converted = num * rates[currency];
+    const prefix = currency === 'KES' ? 'KES ' : currency === 'USD' ? '$ ' : currency === 'EUR' ? '\u20AC ' : currency === 'GBP' ? '\u00A3 ' : currency + ' ';
+    return prefix + converted.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   return 'R ' + num.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
