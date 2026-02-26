@@ -1022,7 +1022,20 @@ async def export_warehouse_excel(
     parcels = await db.shipments.find(query, {"_id": 0}).sort("created_at", 1).to_list(None)
 
     if not parcels:
-        raise HTTPException(404, "No parcels found matching filters")
+        # Return empty Excel instead of 404
+        from openpyxl import Workbook as WB2
+        wb_empty = WB2()
+        ws_empty = wb_empty.active
+        ws_empty.title = "Warehouse Export"
+        ws_empty['A1'] = "No parcels found matching filters"
+        empty_output = BytesIO()
+        wb_empty.save(empty_output)
+        empty_output.seek(0)
+        return StreamingResponse(
+            empty_output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=warehouse_export_empty.xlsx"}
+        )
 
     client_ids = list(set(p.get("client_id") for p in parcels if p.get("client_id")))
     clients = await db.clients.find({"id": {"$in": client_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(None)
