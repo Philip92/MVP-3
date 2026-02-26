@@ -572,7 +572,7 @@ Servex Holdings`;
               </SelectContent>
             </Select>
             <span className="text-xs text-muted-foreground ml-1">
-              {displayCurrency !== 'ZAR' ? `(1 ZAR = ${exchangeRate} ${displayCurrency})` : ''}
+              {displayCurrency !== 'ZAR' ? `(1 ZAR = ${exchangeRates[displayCurrency] || '?'} ${displayCurrency})` : ''}
             </span>
           </div>
         </div>
