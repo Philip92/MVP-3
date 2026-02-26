@@ -711,7 +711,7 @@ Servex Holdings`;
                           </div>
                         </td>
                         <td className="sticky left-[208px] z-10 bg-white px-3 py-2 text-right font-mono">{fmtCurrency(s.total_invoiced)}</td>
-                        <td className={cn("sticky left-[318px] z-10 bg-white px-3 py-2 text-right font-mono font-bold", s.total_outstanding > 0 ? "text-red-600" : "text-green-600")}>
+                        <td className={cn("sticky left-[338px] z-10 bg-white px-3 py-2 text-right font-mono font-bold", s.total_outstanding > 0 ? "text-red-600" : "text-green-600")}>
                           {s.total_outstanding > 0 ? fmtCurrency(s.total_outstanding) : '—'}
                         </td>
                         {tripColumns.map(trip => {
