@@ -763,7 +763,7 @@ export function LoadingStaging() {
                     </Button>
                   </CardHeader>
                   <CardContent className="p-0 bg-amber-50/30">
-                    <div className="max-h-[500px] overflow-auto">
+                    <div className="max-h-[600px] overflow-auto">
                       <ParcelTable
                         parcels={warehouseParcels}
                         selectedIds={selectedWarehouseParcels}
@@ -797,7 +797,7 @@ export function LoadingStaging() {
                     </Button>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <div className="max-h-[500px] overflow-auto">
+                    <div className="max-h-[600px] overflow-auto">
                       <ParcelTable
                         parcels={truckParcels}
                         selectedIds={selectedTruckParcels}

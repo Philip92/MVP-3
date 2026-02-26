@@ -197,9 +197,7 @@ export function Dashboard() {
         <div className="flex gap-2 flex-wrap">
           {[
             { to: '/clients/new', icon: Users, label: 'Add Client' },
-            { to: '/shipments/new', icon: Package, label: 'New Shipment' },
             { to: '/trips/new', icon: Truck, label: 'Create Trip' },
-            { to: '/scanner', icon: BarChart2, label: 'Scan Barcode' }
           ].map(({ to, icon: Icon, label }) => (
             <Button key={to} variant="outline" size="sm" asChild className="h-8 text-xs">
               <Link to={to}>
