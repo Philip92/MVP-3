@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-02-26T09:18:37.099579",
+  "total_tests": 1,
+  "passed_tests": 0,
+  "failed_tests": 1,
+  "success_rate": 0.0,
+  "test_results": [
+    {
+      "test": "Authentication",
+      "status": "FAIL",
+      "details": "No access_token in response",
+      "response_data": {
+        "id": "c88c7b1b-9127-4242-95d3-10b96c3763aa",
+        "email": "admin@servex.com",
+        "name": "Admin User",
+        "picture": null,
+        "tenant_id": "9c9ea961-e8c2-4c5c-a2b7-b5e26f30e425",
+        "tenant_name": "Servex Holdings",
+        "role": "owner",
+        "default_warehouse": null
+      },
+      "timestamp": "2026-02-26T09:18:37.099548"
+    }
+  ]
+}
