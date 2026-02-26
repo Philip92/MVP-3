@@ -1301,12 +1301,22 @@ export function ParcelIntake() {
           <div className="flex items-center gap-3">
             <Button
               className="bg-[#6B633C] hover:bg-[#5a5332] text-white"
+              onClick={handleSaveAllAndPrint}
+              disabled={saving}
+              data-testid="save-all-print-btn"
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              {saving ? 'Saving...' : `Save All & Print Labels (${rows.filter(r => r.description.trim()).length})`}
+            </Button>
+            
+            <Button
+              variant="outline"
               onClick={handleSaveAll}
               disabled={saving}
               data-testid="save-all-btn"
             >
               <Save className="h-4 w-4 mr-2" />
-              {saving ? 'Saving...' : `Save All (${rows.filter(r => r.description.trim()).length} parcels)`}
+              {saving ? 'Saving...' : 'Save All Only'}
             </Button>
             
             <Button 
