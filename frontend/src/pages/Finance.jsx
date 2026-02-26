@@ -654,15 +654,6 @@ Servex Holdings`;
                     <SelectItem value="name_desc">Name Z-A</SelectItem>
                   </SelectContent>
                 </Select>
-                <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={statementShowPaid}
-                    onChange={(e) => { setStatementShowPaid(e.target.checked); fetchStatements(statementSortBy, e.target.checked); }}
-                    className="rounded"
-                  />
-                  Show paid
-                </label>
               </div>
             </div>
 
