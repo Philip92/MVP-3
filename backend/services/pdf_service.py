@@ -570,8 +570,8 @@ async def generate_client_statement_pdf(client_id: str, tenant_id: str):
 
 async def generate_labels_pdf(shipment_ids: list, tenant_id: str):
     """
-    Generate parcel labels PDF - Brother QL-800 compatible format (62mm x 29mm).
-    Compact single-row layout with key info and QR code.
+    Generate parcel labels PDF - Brother QL-800 compatible format (62mm x 100mm).
+    Layout: Header, QR code centered, two-column field grid below.
     """
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
@@ -579,9 +579,9 @@ async def generate_labels_pdf(shipment_ids: list, tenant_id: str):
     from io import BytesIO
     import qrcode
 
-    # Brother QL-800 label: 62mm x 29mm
+    # Brother QL-800 label: 62mm x 100mm
     LABEL_W = 62 * mm
-    LABEL_H = 29 * mm
+    LABEL_H = 100 * mm
 
     shipments = await db.shipments.find({
         "id": {"$in": shipment_ids},
@@ -602,6 +602,10 @@ async def generate_labels_pdf(shipment_ids: list, tenant_id: str):
     trips = await db.trips.find({"id": {"$in": trip_ids}}, {"_id": 0, "id": 1, "trip_number": 1}).to_list(None)
     trip_map = {t["id"]: t.get("trip_number", "N/A") for t in trips}
 
+    warehouse_ids = list(set(s.get("warehouse_id") for s in shipments if s.get("warehouse_id")))
+    warehouses = await db.warehouses.find({"id": {"$in": warehouse_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(None)
+    warehouse_map = {w["id"]: w.get("name", "") for w in warehouses}
+
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=(LABEL_W, LABEL_H))
 
@@ -609,9 +613,10 @@ async def generate_labels_pdf(shipment_ids: list, tenant_id: str):
 
     for shipment in shipments:
         trip_number = trip_map.get(shipment.get("trip_id"), "N/A")
+        warehouse_name = warehouse_map.get(shipment.get("warehouse_id"), "")
 
         # Generate QR code
-        qr = qrcode.QRCode(version=1, box_size=2, border=1)
+        qr = qrcode.QRCode(version=1, box_size=4, border=1)
         qr.add_data(shipment.get("barcode", shipment.get("id", "")))
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white")
@@ -620,53 +625,92 @@ async def generate_labels_pdf(shipment_ids: list, tenant_id: str):
         qr_buffer.seek(0)
         qr_reader = ImageReader(qr_buffer)
 
-        # Thin border
+        # Border
         c.setStrokeColor(colors.black)
         c.setLineWidth(0.5)
         c.rect(1*mm, 1*mm, LABEL_W - 2*mm, LABEL_H - 2*mm)
 
-        # QR code on left
-        qr_size = 20*mm
-        c.drawImage(qr_reader, 2*mm, (LABEL_H - qr_size) / 2, qr_size, qr_size, preserveAspectRatio=True)
+        y = LABEL_H - 5*mm
 
-        # Text area right of QR
-        text_x = 24*mm
-        y_pos = LABEL_H - 5*mm
-        line_h = 3.2*mm
+        # Header
+        c.setFont("Helvetica-Bold", 10)
+        c.drawCentredString(LABEL_W / 2, y, "SERVEX HOLDINGS")
+        y -= 4*mm
+        c.setFont("Helvetica", 6)
+        c.drawCentredString(LABEL_W / 2, y, "Logistics Services to Kenya and South Africa")
+        y -= 3*mm
 
-        # Header line: SERVEX (bold) + Barcode
-        c.setFont("Helvetica-Bold", 6)
-        c.drawString(text_x, y_pos, "SERVEX")
+        # Separator
+        c.setLineWidth(0.5)
+        c.line(3*mm, y, LABEL_W - 3*mm, y)
+        y -= 2*mm
+
+        # QR code centered
+        qr_size = 25*mm
+        c.drawImage(qr_reader, (LABEL_W - qr_size) / 2, y - qr_size, qr_size, qr_size, preserveAspectRatio=True)
+        y -= qr_size + 1*mm
+
+        # Barcode text centered under QR
         barcode_text = shipment.get("barcode", shipment.get("id", "")[:16])
-        c.setFont("Helvetica-Bold", 7)
-        c.drawRightString(LABEL_W - 3*mm, y_pos, barcode_text)
-        y_pos -= line_h
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(LABEL_W / 2, y, barcode_text)
+        y -= 4*mm
 
-        # Separator line
-        c.setLineWidth(0.3)
-        c.line(text_x, y_pos + 1*mm, LABEL_W - 3*mm, y_pos + 1*mm)
-        y_pos -= 1*mm
+        # Separator
+        c.line(3*mm, y, LABEL_W - 3*mm, y)
+        y -= 3*mm
 
-        # Key fields - compact
+        # Calculate fields
         l_cm = shipment.get("length_cm", 0) or 0
         w_cm = shipment.get("width_cm", 0) or 0
         h_cm = shipment.get("height_cm", 0) or 0
         actual_wt = shipment.get("total_weight", 0) or 0
         vol_wt = (l_cm * w_cm * h_cm) / 5000 if (l_cm and w_cm and h_cm) else 0
         ship_wt = max(actual_wt, vol_wt)
+        cbm = round(shipment.get("total_cbm", 0) or (l_cm * w_cm * h_cm / 1000000), 4)
 
-        fields = [
-            (str(shipment.get("client_name", ""))[:18], f"Trip: {trip_number}"),
-            (f"To: {str(shipment.get('recipient', ''))[:15]}", str(shipment.get("destination", ""))[:12]),
-            (f"Wt: {actual_wt:.1f}kg  Ship: {ship_wt:.1f}kg", f"Pcs: {shipment.get('total_pieces', 1)}"),
-            (f"Dims: {l_cm}x{w_cm}x{h_cm}cm", str(shipment.get("created_at", ""))[:10]),
+        # Two-column field grid - 7 rows
+        left_x = 3*mm
+        right_x = LABEL_W / 2 + 1*mm
+        label_offset = 16*mm
+        line_h = 4.5*mm
+
+        fields_left = [
+            ("Parcel ID:", str(shipment.get("id", ""))[:12]),
+            ("Client:", str(shipment.get("client_name", ""))[:14]),
+            ("Recipient:", str(shipment.get("recipient", ""))[:14]),
+            ("Destination:", str(shipment.get("destination", ""))[:12]),
+            ("Weight:", f"{actual_wt:.1f} kg"),
+            ("Ship Wt:", f"{ship_wt:.1f} kg"),
+            ("Pieces:", str(shipment.get("total_pieces", 1))),
         ]
 
-        c.setFont("Helvetica", 5)
-        for left_text, right_text in fields:
-            c.drawString(text_x, y_pos, left_text)
-            c.drawRightString(LABEL_W - 3*mm, y_pos, right_text)
-            y_pos -= line_h
+        fields_right = [
+            ("Trip:", trip_number),
+            ("Invoice:", str(shipment.get("invoice_number", "N/A"))[:12]),
+            ("Status:", str(shipment.get("status", "")).upper()[:10]),
+            ("Dims:", f"{l_cm}x{w_cm}x{h_cm}"),
+            ("CBM:", f"{cbm:.4f}"),
+            ("Warehouse:", warehouse_name[:10]),
+            ("Date:", str(shipment.get("created_at", ""))[:10]),
+        ]
+
+        for i in range(7):
+            # Left column
+            lbl_l, val_l = fields_left[i]
+            c.setFont("Helvetica-Bold", 6)
+            c.drawString(left_x, y, lbl_l)
+            c.setFont("Helvetica", 6)
+            c.drawString(left_x + label_offset, y, val_l)
+
+            # Right column
+            lbl_r, val_r = fields_right[i]
+            c.setFont("Helvetica-Bold", 6)
+            c.drawString(right_x, y, lbl_r)
+            c.setFont("Helvetica", 6)
+            c.drawString(right_x + 14*mm, y, val_r)
+
+            y -= line_h
 
         c.showPage()
 
