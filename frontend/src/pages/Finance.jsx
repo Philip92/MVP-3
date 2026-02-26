@@ -121,9 +121,10 @@ export function Finance() {
   const [activeTab, setActiveTab] = useState('statements');
   const [loading, setLoading] = useState(true);
   
-  // Currency display toggle
+  // Currency display
   const [displayCurrency, setDisplayCurrency] = useState('ZAR');
-  const [exchangeRate, setExchangeRate] = useState(DEFAULT_KES_RATE);
+  const [exchangeRates, setExchangeRates] = useState(DEFAULT_RATES);
+  const [exchangeRate, setExchangeRate] = useState(6.67);
   
   // Client Statements state
   const [statements, setStatements] = useState([]);
