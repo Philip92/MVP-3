@@ -824,7 +824,7 @@ export function LoadingStaging() {
                       size="sm"
                       onClick={handleMarkArrived}
                       disabled={selectedInTransitParcels.size === 0 || moving}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      className="bg-[#3C3F42] hover:bg-[#2A2C2E]"
                     >
                       {moving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ArrowRight className="h-4 w-4 mr-2" />}
                       Mark Arrived ({selectedInTransitParcels.size})
