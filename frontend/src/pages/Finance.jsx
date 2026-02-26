@@ -920,9 +920,9 @@ Servex Holdings`;
                             <TableCell className="text-right font-mono text-xs">{inv.effective_rate > 0 ? `R${inv.effective_rate.toFixed(2)}` : '—'}</TableCell>
                             <TableCell className="text-right font-mono text-xs">{fmtCurrency(inv.total_amount)}</TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                              {displayCurrency === 'KES'
-                                ? `KES ${(inv.total_amount * exchangeRate).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}`
-                                : `KES ${(inv.total_amount * exchangeRate).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}`
+                              {displayCurrency !== 'ZAR' && exchangeRates[displayCurrency]
+                                ? fmtCurrency(inv.total_amount)
+                                : `KES ${(inv.total_amount * (exchangeRates.KES || 6.67)).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}`
                               }
                             </TableCell>
                             <TableCell className="min-w-[120px]">
