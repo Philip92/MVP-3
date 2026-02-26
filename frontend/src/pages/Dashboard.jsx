@@ -123,14 +123,21 @@ export function Dashboard() {
   const [exchangeRates, setExchangeRates] = useState(DEFAULT_RATES);
 
   useEffect(() => {
-    const fetchRate = async () => {
+    const fetchRates = async () => {
       try {
         const r = await axios.get(`${API}/settings/currencies`, { withCredentials: true });
-        const kes = r.data?.currencies?.find(c => c.code === 'KES');
-        if (kes?.exchange_rate) setKesRate(kes.exchange_rate);
+        if (r.data?.currencies) {
+          const rates = {};
+          r.data.currencies.forEach(c => {
+            if (c.code && c.exchange_rate) rates[c.code] = c.exchange_rate;
+          });
+          if (Object.keys(rates).length > 0) {
+            setExchangeRates(prev => ({ ...prev, ...rates }));
+          }
+        }
       } catch {}
     };
-    fetchRate();
+    fetchRates();
   }, []);
 
   useEffect(() => {
