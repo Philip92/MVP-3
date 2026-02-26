@@ -958,7 +958,7 @@ Servex Holdings`;
                             <TableCell />
                             <TableCell className="text-right font-mono text-xs">{fmtCurrency(worksheetData.summary.total_revenue)}</TableCell>
                             <TableCell className="text-right font-mono text-xs">
-                              KES {(worksheetData.summary.total_revenue * exchangeRate).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}
+                              KES {(worksheetData.summary.total_revenue * (exchangeRates.KES || 6.67)).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}
                             </TableCell>
                             <TableCell colSpan={2} />
                             <TableCell className="text-right font-mono text-xs text-red-600">{fmtCurrency(worksheetData.summary.total_outstanding)}</TableCell>
