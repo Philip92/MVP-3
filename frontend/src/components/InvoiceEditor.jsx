@@ -422,7 +422,7 @@ export function InvoiceEditor() {
     toast.success(`Updated rate for ${selectedLineItems.size} items`);
   };
 
-  // Calculate reverse rate
+  // Calculate reverse rate - uses shipping weight (max of actual and volumetric)
   const handleCalculateRate = () => {
     const target = parseFloat(targetTotal);
     if (isNaN(target) || target <= 0) {
@@ -430,23 +430,26 @@ export function InvoiceEditor() {
       return;
     }
     
-    // Calculate total weight of selected items (or all items if none selected)
+    // Calculate total shipping weight of selected items (or all items if none selected)
     const itemsToCalculate = selectedLineItems.size > 0 
       ? lineItems.filter(item => selectedLineItems.has(item.id))
       : lineItems;
     
-    const totalWeight = itemsToCalculate.reduce((sum, item) => {
-      return sum + (parseFloat(item.weight) || parseFloat(item.quantity) || 0);
+    const totalShippingWeight = itemsToCalculate.reduce((sum, item) => {
+      const actualWeight = parseFloat(item.weight) || 0;
+      const volWeight = calculateVolumetricWeight(item.length_cm, item.width_cm, item.height_cm) || 0;
+      const shippingWeight = Math.max(actualWeight, volWeight);
+      return sum + shippingWeight;
     }, 0);
     
-    if (totalWeight <= 0) {
-      toast.error('No weight to calculate rate from');
+    if (totalShippingWeight <= 0) {
+      toast.error('No shipping weight to calculate rate from');
       return;
     }
     
-    const rate = target / totalWeight;
+    const rate = target / totalShippingWeight;
     setCalculatedRate(rate.toFixed(2));
-    toast.success(`Rate needed: R ${rate.toFixed(2)} per kg`);
+    toast.success(`Rate needed: R ${rate.toFixed(2)} per kg (total shipping weight: ${totalShippingWeight.toFixed(2)} kg)`);
   };
 
   // Apply calculated rate
