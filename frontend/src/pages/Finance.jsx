@@ -545,21 +545,23 @@ Servex Holdings`;
             <p className="text-gray-500 text-sm">Manage invoices, statements, and payments</p>
           </div>
           
-          {/* Currency Toggle - Global for all tabs */}
+          {/* Currency Dropdown - Global for all tabs */}
           <div className="flex items-center gap-2 bg-white border rounded-lg px-3 py-1.5" data-testid="currency-toggle">
-            <span className={cn("text-sm font-medium transition-colors", displayCurrency === 'ZAR' ? "text-[#6B633C]" : "text-gray-400")}>
-              ZAR
-            </span>
-            <Switch
-              checked={displayCurrency === 'KES'}
-              onCheckedChange={(checked) => setDisplayCurrency(checked ? 'KES' : 'ZAR')}
-              data-testid="currency-switch"
-            />
-            <span className={cn("text-sm font-medium transition-colors", displayCurrency === 'KES' ? "text-[#6B633C]" : "text-gray-400")}>
-              KES
-            </span>
-            <span className="text-xs text-muted-foreground ml-2">
-              (1 ZAR = {exchangeRate} KES)
+            <span className="text-xs text-muted-foreground mr-1">Currency:</span>
+            <Select value={displayCurrency} onValueChange={setDisplayCurrency}>
+              <SelectTrigger className="h-7 text-xs w-[100px] border-0 shadow-none" data-testid="currency-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ZAR">ZAR</SelectItem>
+                <SelectItem value="KES">KES</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+                <SelectItem value="EUR">EUR</SelectItem>
+                <SelectItem value="GBP">GBP</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground ml-1">
+              {displayCurrency !== 'ZAR' ? `(1 ZAR = ${exchangeRate} ${displayCurrency})` : ''}
             </span>
           </div>
         </div>
