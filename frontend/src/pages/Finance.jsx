@@ -196,7 +196,7 @@ export function Finance() {
   }, []);
 
   // Helper for currency formatting with current toggle
-  const fmtCurrency = (amount) => formatCurrency(amount, displayCurrency, exchangeRate);
+  const fmtCurrency = (amount) => formatCurrency(amount, displayCurrency, exchangeRates);
 
   // Fetch data on mount
   useEffect(() => {
