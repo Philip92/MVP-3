@@ -120,7 +120,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('mtd');
   const [currency, setCurrency] = useState('ZAR');
-  const [kesRate, setKesRate] = useState(DEFAULT_KES);
+  const [exchangeRates, setExchangeRates] = useState(DEFAULT_RATES);
 
   useEffect(() => {
     const fetchRate = async () => {
