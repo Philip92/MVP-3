@@ -28,7 +28,7 @@ import {
 import { cn } from '../lib/utils';
 
 const API = `${window.location.origin}/api`;
-const DEFAULT_KES = 6.67;
+const DEFAULT_RATES = { KES: 6.67, USD: 0.054, EUR: 0.050, GBP: 0.043 };
 
 const statusColors = {
   warehouse: 'bg-blue-100 text-blue-700',
@@ -37,9 +37,13 @@ const statusColors = {
   arrived: 'bg-purple-100 text-purple-700'
 };
 
-const fmtAmt = (v, currency = 'ZAR', rate = DEFAULT_KES) => {
+const fmtAmt = (v, currency = 'ZAR', rates = DEFAULT_RATES) => {
   const n = parseFloat(v) || 0;
-  if (currency === 'KES') return 'KES ' + (n * rate).toLocaleString('en-ZA', { maximumFractionDigits: 0 });
+  if (currency !== 'ZAR' && rates[currency]) {
+    const converted = n * rates[currency];
+    const prefix = currency === 'KES' ? 'KES ' : currency === 'USD' ? '$ ' : currency === 'EUR' ? '\u20AC ' : currency === 'GBP' ? '\u00A3 ' : currency + ' ';
+    return prefix + converted.toLocaleString('en-ZA', { maximumFractionDigits: 0 });
+  }
   return 'R ' + n.toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 };
 
