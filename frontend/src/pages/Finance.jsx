@@ -660,26 +660,26 @@ Servex Holdings`;
             {/* Matrix Table */}
             <div className="relative">
               <div className="overflow-x-auto rounded-lg border border-gray-200 h-[calc(100vh-350px)] sticky-scrollbar" style={{ maxHeight: '70vh' }}>
-                <table className="w-full text-xs border-collapse" style={{ minWidth: `${Math.max(800, 280 + tripColumns.length * 120)}px` }}>
+                <table className="w-full text-xs border-collapse" style={{ minWidth: `${Math.max(800, 280 + tripColumns.length * 140)}px` }}>
                 <thead>
-                  <tr className="bg-[#6B633C] text-white">
+                  <tr style={{ backgroundColor: '#3C3F42' }} className="text-white">
                     {/* Frozen cols */}
-                    <th className="sticky left-0 z-10 bg-[#6B633C] px-2 py-2 text-left w-8 font-semibold">#</th>
-                    <th className="sticky left-8 z-10 bg-[#6B633C] px-3 py-2 text-left min-w-[160px] font-semibold">Client</th>
-                    <th className="sticky left-[208px] z-10 bg-[#6B633C] px-3 py-2 text-right min-w-[110px] font-semibold">Total Invoiced</th>
-                    <th className="sticky left-[318px] z-10 bg-[#6B633C] px-3 py-2 text-right min-w-[110px] font-semibold">Outstanding</th>
+                    <th className="sticky left-0 z-10 px-2 py-2 text-left w-8 font-semibold" style={{ backgroundColor: '#3C3F42' }}>#</th>
+                    <th className="sticky left-8 z-10 px-3 py-2 text-left min-w-[160px] font-semibold" style={{ backgroundColor: '#3C3F42' }}>Client</th>
+                    <th className="sticky left-[208px] z-10 px-3 py-2 text-right min-w-[130px] font-semibold" style={{ backgroundColor: '#3C3F42' }}>Total Invoiced</th>
+                    <th className="sticky left-[338px] z-10 px-3 py-2 text-right min-w-[130px] font-semibold" style={{ backgroundColor: '#3C3F42' }}>Outstanding</th>
                     {/* Trip sub-headers */}
                     {tripColumns.map(trip => (
-                      <th key={trip} colSpan={2} className="px-1 py-2 text-center min-w-[120px] font-semibold border-l border-white/20">
+                      <th key={trip} colSpan={2} className="px-1 py-2 text-center min-w-[140px] font-semibold border-l border-white/20">
                         {trip}
                       </th>
                     ))}
                   </tr>
-                  <tr className="bg-[#5a5332] text-white/80">
-                    <th className="sticky left-0 z-10 bg-[#5a5332]" />
-                    <th className="sticky left-8 z-10 bg-[#5a5332]" />
-                    <th className="sticky left-[208px] z-10 bg-[#5a5332]" />
-                    <th className="sticky left-[318px] z-10 bg-[#5a5332]" />
+                  <tr style={{ backgroundColor: '#2A2C2E' }} className="text-white/80">
+                    <th className="sticky left-0 z-10" style={{ backgroundColor: '#2A2C2E' }} />
+                    <th className="sticky left-8 z-10" style={{ backgroundColor: '#2A2C2E' }} />
+                    <th className="sticky left-[208px] z-10" style={{ backgroundColor: '#2A2C2E' }} />
+                    <th className="sticky left-[338px] z-10" style={{ backgroundColor: '#2A2C2E' }} />
                     {tripColumns.map(trip => (
                       <React.Fragment key={trip}>
                         <th className="px-1 py-1 text-right border-l border-white/20 text-[10px]">INV</th>
