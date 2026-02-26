@@ -1394,6 +1394,10 @@ export function Warehouse() {
                                 <Eye className="h-4 w-4 mr-2" />
                                 View
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleViewLabel(parcel)} data-testid={`view-label-${parcel.id}`}>
+                                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                                View Label
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openDetailModal(parcel)}>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit
