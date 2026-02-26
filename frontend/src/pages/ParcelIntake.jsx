@@ -775,6 +775,30 @@ export function ParcelIntake() {
     setPhotoDialogOpen(true);
   };
 
+  // Save All & Print Labels - saves parcels then downloads labels PDF
+  const handleSaveAllAndPrint = async () => {
+    await handleSaveAll();
+    // After save, get the saved shipment IDs and download labels
+    const savedRows = rows.filter(r => r.saved && r.shipmentId);
+    if (savedRows.length > 0) {
+      try {
+        const shipmentIds = savedRows.map(r => r.shipmentId);
+        const response = await axios.post(
+          `${API}/warehouse/labels/pdf`,
+          { shipment_ids: shipmentIds },
+          { withCredentials: true, responseType: 'blob' }
+        );
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        // Open in new tab for printing
+        window.open(url, '_blank');
+        toast.success('Labels PDF opened for printing');
+      } catch (error) {
+        toast.error('Parcels saved but label generation failed');
+      }
+    }
+  };
+
   const openDocumentDialog = (rowId) => {
     setActiveRowId(rowId);
     setDocumentDialogOpen(true);
