@@ -149,7 +149,7 @@ export function Dashboard() {
     }
   };
 
-  const fmt = (v) => fmtAmt(v, currency, kesRate);
+  const fmt = (v) => fmtAmt(v, currency, exchangeRates);
   const fin = stats?.financial || {};
   const ops = stats?.operations || {};
 
