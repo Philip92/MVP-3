@@ -214,16 +214,20 @@ async def delete_client(client_id: str, tenant_id: str = Depends(get_tenant_id))
 
 @router.get("/clients/export/csv")
 async def export_clients_csv(tenant_id: str = Depends(get_tenant_id)):
-    """Export all clients to CSV (Session E)"""
-    clients = await db.clients.find({"tenant_id": tenant_id}, {"_id": 0}).to_list(5000)
+    """Export all clients to CSV - extended format."""
+    clients = await db.clients.find(
+        {"tenant_id": tenant_id, "status": {"$ne": "merged"}},
+        {"_id": 0}
+    ).sort("name", 1).to_list(5000)
     
     output = io.StringIO()
     fields = [
-        "name", "company_name", "email", "phone", "vat_number",
-        "default_rate_value", "default_currency", "position",
-        "primary_place_of_business", "nature_of_relationship",
-        "owner", "frequency_of_business", "estimated_value_per_trip",
-        "total_amount_spent"
+        "name", "company_name", "phone", "email", "whatsapp",
+        "physical_address", "billing_address", "vat_number",
+        "credit_limit", "payment_terms_days", "default_currency",
+        "default_rate_type", "default_rate_value",
+        "position", "primary_place_of_business", "nature_of_relationship",
+        "owner", "frequency_of_business", "estimated_value_per_trip"
     ]
     
     writer = csv.DictWriter(output, fieldnames=fields)
@@ -238,8 +242,8 @@ async def export_clients_csv(tenant_id: str = Depends(get_tenant_id)):
                     val = "ZAR"
                 elif f == "nature_of_relationship":
                     val = "Customer"
-                elif f == "total_amount_spent":
-                    val = 0.0
+                elif f in ("credit_limit", "payment_terms_days", "default_rate_value", "estimated_value_per_trip"):
+                    val = 0
                 else:
                     val = ""
             row[f] = val
