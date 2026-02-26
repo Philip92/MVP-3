@@ -170,20 +170,29 @@ export function Finance() {
 
   // Fetch exchange rates from settings
   useEffect(() => {
-    const fetchExchangeRate = async () => {
+    const fetchExchangeRates = async () => {
       try {
         const response = await axios.get(`${API}/settings/currencies`, { withCredentials: true });
         if (response.data?.currencies) {
-          const kesCurrency = response.data.currencies.find(c => c.code === 'KES');
-          if (kesCurrency?.exchange_rate) {
-            setExchangeRate(kesCurrency.exchange_rate);
+          // Legacy format: array of {code, exchange_rate}
+          const rates = {};
+          response.data.currencies.forEach(c => {
+            if (c.code && c.exchange_rate) rates[c.code] = c.exchange_rate;
+          });
+          if (Object.keys(rates).length > 0) {
+            setExchangeRates(prev => ({ ...prev, ...rates }));
+            if (rates.KES) setExchangeRate(rates.KES);
           }
+        } else if (response.data?.rates) {
+          // New format: {base_currency, rates: {KES: 6.67, ...}}
+          setExchangeRates(prev => ({ ...prev, ...response.data.rates }));
+          if (response.data.rates.KES) setExchangeRate(response.data.rates.KES);
         }
       } catch (error) {
         console.error('Failed to fetch exchange rates:', error);
       }
     };
-    fetchExchangeRate();
+    fetchExchangeRates();
   }, []);
 
   // Helper for currency formatting with current toggle
