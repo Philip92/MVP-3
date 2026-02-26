@@ -176,15 +176,20 @@ export function Dashboard() {
                 </button>
               ))}
             </div>
-            {/* ZAR / KES Toggle */}
-            <div className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1" data-testid="currency-toggle-dashboard">
-              <span className={cn("text-xs font-medium", currency === 'ZAR' ? "text-[#6B633C]" : "text-gray-400")}>ZAR</span>
-              <Switch
-                checked={currency === 'KES'}
-                onCheckedChange={(c) => setCurrency(c ? 'KES' : 'ZAR')}
-                data-testid="currency-switch-dashboard"
-              />
-              <span className={cn("text-xs font-medium", currency === 'KES' ? "text-[#6B633C]" : "text-gray-400")}>KES</span>
+            {/* Currency Dropdown */}
+            <div className="flex items-center gap-1 bg-white border rounded-lg px-2 py-1" data-testid="currency-toggle-dashboard">
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger className="h-6 text-xs w-[80px] border-0 shadow-none" data-testid="currency-switch-dashboard">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ZAR">ZAR</SelectItem>
+                  <SelectItem value="KES">KES</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="EUR">EUR</SelectItem>
+                  <SelectItem value="GBP">GBP</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex gap-2">
               <Button asChild variant="outline" size="sm" className="h-8 text-xs">
